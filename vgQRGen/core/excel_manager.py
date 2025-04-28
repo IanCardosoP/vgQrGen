@@ -1,8 +1,8 @@
 """
-Excel Data Manager Module.
+Módulo Gestor de Datos Excel.
 
-This module provides functionality for reading and processing Excel files
-containing WiFi network information.
+Este módulo proporciona funcionalidad para leer y procesar archivos Excel
+que contienen información de redes WiFi.
 """
 
 import os
@@ -18,7 +18,7 @@ logger = LogManager.get_logger(__name__)
 
 @dataclass
 class ExcelColumns:
-    """Data class for storing Excel column indices."""
+    """Clase de datos para almacenar índices de columnas de Excel."""
     room: int
     ssid: int
     password: Optional[int] = None
@@ -26,9 +26,9 @@ class ExcelColumns:
     property_type: Optional[int] = None
 
 class ExcelManager:
-    """Manages Excel file operations and data extraction."""
+    """Gestiona operaciones de archivo Excel y extracción de datos."""
     
-    # Keywords for auto-detecting column headers
+    # Palabras clave para auto-detectar encabezados de columnas
     COLUMN_KEYWORDS = {
         'room': ['room', 'habitacion', 'habitación', 'number', 'número', 'hab', 'cuarto', 'villa'],
         'ssid': ['ssid', 'network', 'red', 'wifi', 'nombre', 'name', 'net'],
@@ -39,10 +39,10 @@ class ExcelManager:
     
     def __init__(self, file_path: str):
         """
-        Initialize Excel Manager.
+        Inicializar Gestor de Excel.
         
         Args:
-            file_path (str): Path to Excel file
+            file_path (str): Ruta al archivo Excel
         """
         self.file_path = file_path
         self.workbook = None
@@ -51,62 +51,62 @@ class ExcelManager:
         
     def validate_file(self) -> Tuple[bool, str]:
         """
-        Validate the Excel file before attempting to load it.
+        Validar el archivo Excel antes de intentar cargarlo.
         
         Returns:
-            Tuple[bool, str]: (is_valid, error_message)
+            Tuple[bool, str]: (es_válido, mensaje_error)
         """
         if not self.file_path:
-            return False, "No file path provided"
+            return False, "No se proporcionó ruta de archivo"
             
         if not os.path.exists(self.file_path):
-            return False, f"File not found: {self.file_path}"
+            return False, f"Archivo no encontrado: {self.file_path}"
             
         if not self.file_path.lower().endswith(('.xlsx', '.xls')):
-            return False, "File must be an Excel file (.xlsx or .xls)"
+            return False, "El archivo debe ser un archivo Excel (.xlsx o .xls)"
             
         try:
-            # Try to open the file to check if it's not corrupted
+            # Intentar abrir el archivo para verificar que no está corrupto
             with open(self.file_path, 'rb') as f:
-                f.read(10)  # Read first few bytes
+                f.read(10)  # Leer primeros bytes
             return True, ""
         except Exception as e:
-            return False, f"File is not accessible: {str(e)}"
+            return False, f"El archivo no es accesible: {str(e)}"
     
     def load_workbook(self) -> Tuple[bool, str]:
         """
-        Load the Excel workbook only, without selecting a sheet.
+        Cargar solo el libro de Excel, sin seleccionar una hoja.
         
         Returns:
-            Tuple[bool, str]: (success, error_message)
+            Tuple[bool, str]: (éxito, mensaje_error)
         """
-        # Validate file first
+        # Validar archivo primero
         is_valid, error_msg = self.validate_file()
         if not is_valid:
-            logger.error(f"File validation failed: {error_msg}")
+            logger.error(f"Falló la validación del archivo: {error_msg}")
             return False, error_msg
             
         try:
             self.workbook = openpyxl.load_workbook(self.file_path, data_only=True)
             if not self.workbook.sheetnames:
-                return False, "Excel file contains no sheets"
+                return False, "El archivo Excel no contiene hojas"
             return True, ""
             
         except InvalidFileException:
-            error_msg = "Invalid Excel file format"
+            error_msg = "Formato de archivo Excel inválido"
             logger.error(error_msg)
             return False, error_msg
         except Exception as e:
-            error_msg = f"Error loading workbook: {str(e)}"
+            error_msg = f"Error al cargar el libro: {str(e)}"
             logger.error(error_msg)
             return False, error_msg
     
     def get_sheet_names(self) -> List[str]:
         """
-        Get list of available sheet names.
+        Obtener lista de nombres de hojas disponibles.
         
         Returns:
-            List[str]: List of sheet names
+            List[str]: Lista de nombres de hojas
         """
         if self.workbook:
             return self.workbook.sheetnames
@@ -114,39 +114,39 @@ class ExcelManager:
     
     def set_active_sheet(self, sheet_name: str) -> Tuple[bool, str]:
         """
-        Set the active sheet and attempt to detect columns.
+        Establecer la hoja activa e intentar detectar columnas.
         
         Args:
-            sheet_name (str): Name of the sheet to use
+            sheet_name (str): Nombre de la hoja a usar
             
         Returns:
-            Tuple[bool, str]: (success, error_message)
+            Tuple[bool, str]: (éxito, mensaje_error)
         """
         if not self.workbook:
-            return False, "No workbook loaded"
+            return False, "No hay libro cargado"
             
         if sheet_name not in self.workbook.sheetnames:
-            return False, f"Sheet '{sheet_name}' not found"
+            return False, f"Hoja '{sheet_name}' no encontrada"
             
         self.sheet = self.workbook[sheet_name]
         
-        # Check if sheet is empty
-        if self.sheet.max_row < 2:  # Need at least header row and one data row
-            return False, "Selected sheet appears to be empty or contains only headers"
+        # Verificar si la hoja está vacía
+        if self.sheet.max_row < 2:  # Necesita al menos fila de encabezado y una fila de datos
+            return False, "La hoja seleccionada parece estar vacía o solo contiene encabezados"
             
-        # Attempt to detect columns from header row
+        # Intentar detectar columnas de la fila de encabezado
         self.columns = self._detect_columns()
         if not self.columns:
-            return False, "Could not detect required columns (room and SSID) in the header row"
+            return False, "No se pudieron detectar las columnas requeridas (habitación y SSID) en la fila de encabezado"
             
         return True, ""
             
     def _detect_columns(self) -> Optional[ExcelColumns]:
         """
-        Automatically detect relevant columns from the header row (first row).
+        Detectar automáticamente columnas relevantes de la fila de encabezado.
         
         Returns:
-            Optional[ExcelColumns]: Column indices if found
+            Optional[ExcelColumns]: Índices de columnas si se encuentran
         """
         if not self.sheet:
             return None
@@ -159,23 +159,23 @@ class ExcelManager:
             'property': None
         }
         
-        # Get header row (first row)
+        # Obtener fila de encabezado (primera fila)
         header_row = list(self.sheet.iter_rows(min_row=1, max_row=1))[0]
         
-        # Search header row for column names
+        # Buscar en fila de encabezado nombres de columnas
         for idx, cell in enumerate(header_row):
             if not cell.value:
                 continue
                 
             cell_value = str(cell.value).lower().strip()
             
-            # Check for exact matches first
+            # Verificar coincidencias exactas primero
             for col_type, keywords in self.COLUMN_KEYWORDS.items():
                 if cell_value in keywords:
                     column_indices[col_type] = idx
                     break
                     
-            # If no exact match, check for partial matches
+            # Si no hay coincidencia exacta, verificar coincidencias parciales
             if all(v is not None for v in column_indices.values()):
                 continue
                 
@@ -186,16 +186,16 @@ class ExcelManager:
                     column_indices[col_type] = idx
                     break
         
-        # Log found and missing columns
+        # Registrar columnas encontradas y faltantes
         found_cols = [k for k, v in column_indices.items() if v is not None]
         missing_cols = [k for k, v in column_indices.items() if v is None]
-        logger.info(f"Found columns in header row: {', '.join(found_cols)}")
+        logger.info(f"Columnas encontradas en fila de encabezado: {', '.join(found_cols)}")
         if missing_cols:
-            logger.warning(f"Missing columns in header row: {', '.join(missing_cols)}")
+            logger.warning(f"Columnas faltantes en fila de encabezado: {', '.join(missing_cols)}")
         
-        # Verify required columns are found
+        # Verificar que se encontraron las columnas requeridas
         if column_indices['room'] is None or column_indices['ssid'] is None:
-            logger.error("Required columns 'room' and 'ssid' not found in header row")
+            logger.error("Columnas requeridas 'habitación' y 'ssid' no encontradas en fila de encabezado")
             return None
             
         return ExcelColumns(
@@ -208,13 +208,13 @@ class ExcelManager:
 
     def get_room_data(self, room_number: str) -> Optional[WiFiCredentials]:
         """
-        Get WiFi credentials for a specific room.
+        Obtener credenciales WiFi para una habitación específica.
         
         Args:
-            room_number (str): Room number to search for
+            room_number (str): Número de habitación a buscar
             
         Returns:
-            Optional[WiFiCredentials]: Room's WiFi credentials if found
+            Optional[WiFiCredentials]: Credenciales WiFi de la habitación si se encuentra
         """
         if not self.sheet or not self.columns:
             return None
@@ -230,15 +230,15 @@ class ExcelManager:
                     property_type=str(row[self.columns.property_type]).strip() if self.columns.property_type is not None and row[self.columns.property_type] else None
                 )
         
-        logger.warning(f"Room {room_number} not found")
+        logger.warning(f"Habitación {room_number} no encontrada")
         return None
         
     def get_all_rooms(self) -> List[WiFiCredentials]:
         """
-        Get WiFi credentials for all rooms in the sheet.
+        Obtener credenciales WiFi para todas las habitaciones en la hoja.
         
         Returns:
-            List[WiFiCredentials]: List of all room credentials
+            List[WiFiCredentials]: Lista de todas las credenciales de habitaciones
         """
         if not self.sheet or not self.columns:
             return []
@@ -261,13 +261,13 @@ class ExcelManager:
         
     def set_columns_manually(self, column_indices: Dict[str, int]) -> bool:
         """
-        Manually set column indices.
+        Establecer índices de columnas manualmente.
         
         Args:
-            column_indices (Dict[str, int]): Dictionary mapping column names to indices
+            column_indices (Dict[str, int]): Diccionario que mapea nombres de columnas a índices
             
         Returns:
-            bool: True if successful
+            bool: True si fue exitoso
         """
         try:
             self.columns = ExcelColumns(
@@ -279,5 +279,5 @@ class ExcelManager:
             )
             return True
         except Exception as e:
-            logger.error(f"Error setting columns manually: {str(e)}")
+            logger.error(f"Error al establecer columnas manualmente: {str(e)}")
             return False

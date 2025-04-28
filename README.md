@@ -1,81 +1,81 @@
-# WiFi QR Code Generator
+# Generador de Códigos QR para WiFi
 
-A Python application for generating QR codes for WiFi networks, with support for Excel file import and manual entry.
+Una aplicación Python para generar códigos QR para redes WiFi, con soporte para importación de archivos Excel y entrada manual.
 
-## Features
+## Características
 
-- Generate QR codes for WiFi networks with configurable encryption types
-- Import network data from Excel files
-- Add property logos to QR codes (VLEV, VDPF, etc.)
-- Add SSID and password text below QR codes
-- Preview QR codes before saving
-- GUI interface with Excel import and manual entry tabs
+- Genera códigos QR para redes WiFi con tipos de encriptación configurables
+- Importa datos de red desde archivos Excel
+- Agrega logotipos de propiedades a los códigos QR (VLEV, VDPF, etc.)
+- Agrega texto de SSID y contraseña debajo de los códigos QR
+- Vista previa de códigos QR antes de guardar
+- Interfaz gráfica con pestañas de importación Excel y entrada manual
 
-## Installation
+## Instalación
 
-1. Clone this repository
-2. Install dependencies:
+1. Clonar este repositorio
+2. Instalar dependencias:
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+## Uso
 
-### Starting the Application
+### Iniciar la Aplicación
 
 ```bash
-python -m qr_generator [--debug]
+python -m vgQRGen [--debug]
 ```
 
-### Excel File Format
+### Formato del Archivo Excel
 
-The Excel file should contain the following columns (column names are flexible and will be auto-detected):
-- Room number (e.g., 1101A, 3506B)
+El archivo Excel debe contener las siguientes columnas (los nombres de columnas son flexibles y se detectarán automáticamente):
+- Número de habitación (ej., 1101A, 3506B)
 - SSID
-- Password (optional for open networks)
-- Encryption type (optional, defaults to WPA2)
-- Property type (optional, for logo selection)
+- Contraseña (opcional para redes abiertas)
+- Tipo de encriptación (opcional, por defecto WPA2)
+- Tipo de propiedad (opcional, para selección de logotipo)
 
-### GUI Features
+### Características de la Interfaz Gráfica
 
-#### Excel Import Tab
-- Select Excel file
-- Search for specific room numbers
-- Generate QR for single room or all rooms
-- Preview generated QR codes
+#### Pestaña de Importación Excel
+- Seleccionar archivo Excel
+- Buscar números de habitación específicos
+- Generar QR para una habitación o todas las habitaciones
+- Vista previa de códigos QR generados
 
-#### Manual Entry Tab
-- Enter network details manually
-- Select encryption type and property
-- Preview and save QR codes
+#### Pestaña de Entrada Manual
+- Ingresar detalles de red manualmente
+- Seleccionar tipo de encriptación y propiedad
+- Vista previa y guardar códigos QR
 
-### Common Features
-- Open codes folder
-- View last generated QR
-- Preview QR before saving
+### Características Comunes
+- Abrir carpeta de códigos
+- Ver último QR generado
+- Vista previa de QR antes de guardar
 
-## Project Structure
+## Estructura del Proyecto
 
 ```
-qr_generator/
-├── __main__.py           # Application entry point
+vgQRGen/
+├── __main__.py           # Punto de entrada de la aplicación
 ├── core/
-│   ├── excel_manager.py  # Excel file handling
-│   └── qr_manager.py     # QR code generation
+│   ├── excel_manager.py  # Manejo de archivos Excel
+│   └── qr_manager.py     # Generación de códigos QR
 ├── gui/
-│   └── main_window.py    # GUI implementation
+│   └── main_window.py    # Implementación de la interfaz gráfica
 └── utils/
-    └── logging_utils.py  # Logging configuration
+    └── logging_utils.py  # Configuración de registro
 ```
 
-## Supported Properties
+## Propiedades Soportadas
 
 - VLEV/VLE (Villa Estancia)
 - VDPF/VG/VDP (Villa Group)
 
-## Dependencies
+## Dependencias
 
-- openpyxl: Excel file handling
-- Pillow: Image processing
-- segno: QR code generation
-- tqdm: Progress bars for batch processing
+- openpyxl: Manejo de archivos Excel
+- Pillow: Procesamiento de imágenes
+- segno: Generación de códigos QR
+- tqdm: Barras de progreso para procesamiento por lotes

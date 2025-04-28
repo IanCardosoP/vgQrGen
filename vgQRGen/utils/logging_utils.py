@@ -1,7 +1,7 @@
 """
-Logging Utility Module.
+Módulo de Utilidades de Registro.
 
-This module provides centralized logging configuration for the QR generator application.
+Este módulo proporciona una configuración centralizada de registro para la aplicación generadora de QR.
 """
 
 import os
@@ -10,47 +10,47 @@ import datetime
 from typing import Optional
 
 class LogManager:
-    """Manages application-wide logging configuration."""
+    """Gestiona la configuración de registro para toda la aplicación."""
     
     _instance = None
     _initialized = False
     
     def __new__(cls, *args, **kwargs):
-        """Ensure singleton pattern."""
+        """Asegurar patrón singleton."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
     
     def __init__(self, log_dir: str = "logs", debug: bool = False):
         """
-        Initialize logging configuration.
+        Inicializar configuración de registro.
         
         Args:
-            log_dir (str): Directory to store log files
-            debug (bool): Whether to enable debug logging
+            log_dir (str): Directorio para almacenar archivos de registro
+            debug (bool): Si se debe habilitar el registro de depuración
         """
-        # Skip if already initialized
+        # Omitir si ya está inicializado
         if LogManager._initialized:
             return
             
         self.log_dir = log_dir
         os.makedirs(log_dir, exist_ok=True)
         
-        # Create logger
+        # Crear registrador
         self.logger = logging.getLogger('vgQrGen')
         self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
         
-        # Prevent duplicate handlers
+        # Prevenir manejadores duplicados
         if self.logger.handlers:
             return
             
-        # Console handler
+        # Manejador de consola
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG if debug else logging.INFO)
         console_format = logging.Formatter('%(levelname)s: %(message)s')
         console_handler.setFormatter(console_format)
         
-        # File handler
+        # Manejador de archivo
         log_file = os.path.join(
             log_dir,
             f"vgQrGen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
@@ -62,27 +62,27 @@ class LogManager:
         )
         file_handler.setFormatter(file_format)
         
-        # Add handlers
+        # Agregar manejadores
         self.logger.addHandler(console_handler)
         self.logger.addHandler(file_handler)
         
         LogManager._initialized = True
         
-        # Initial log entries
-        self.logger.info("Logging system initialized")
+        # Entradas iniciales de registro
+        self.logger.info("Sistema de registro inicializado")
         if debug:
-            self.logger.debug("Debug logging enabled")
+            self.logger.debug("Registro de depuración habilitado")
     
     @classmethod
     def get_logger(cls, name: Optional[str] = None) -> logging.Logger:
         """
-        Get a logger instance.
+        Obtener una instancia de registrador.
         
         Args:
-            name (Optional[str]): Logger name for module-specific logging
+            name (Optional[str]): Nombre del registrador para registro específico de módulo
             
         Returns:
-            logging.Logger: Configured logger instance
+            logging.Logger: Instancia de registrador configurada
         """
         if not cls._initialized:
             cls()

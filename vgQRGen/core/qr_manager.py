@@ -1,8 +1,8 @@
 """
-QR Code Generator and Manager Module.
+Módulo Generador y Gestor de Códigos QR.
 
-This module provides functionality for generating and manipulating QR codes
-for WiFi network credentials.
+Este módulo proporciona funcionalidad para generar y manipular códigos QR
+para credenciales de redes WiFi.
 """
 
 import os
@@ -18,14 +18,14 @@ logger = LogManager.get_logger(__name__)
 
 @dataclass
 class WiFiCredentials:
-    """Data class for storing WiFi network credentials."""
+    """Clase de datos para almacenar credenciales de red WiFi."""
     ssid: str
     password: Optional[str] = None
     encryption: str = "WPA2"
     property_type: Optional[str] = None
 
 class QRManager:
-    """Manages QR code generation and manipulation."""
+    """Gestiona la generación y manipulación de códigos QR."""
     
     SUPPORTED_PROPERTIES = {"VLEV", "VLE", "VDPF", "VG", "VDP"}
     LOGO_PATHS = {
@@ -35,26 +35,26 @@ class QRManager:
     
     def __init__(self, output_dir: str = "codes"):
         """
-        Initialize QR Manager.
+        Inicializar Gestor QR.
         
         Args:
-            output_dir (str): Directory to store generated QR codes
+            output_dir (str): Directorio para almacenar códigos QR generados
         """
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
         
     def generate_wifi_qr(self, credentials: WiFiCredentials) -> BytesIO:
         """
-        Generate a QR code for WiFi credentials.
+        Generar un código QR para credenciales WiFi.
         
         Args:
-            credentials (WiFiCredentials): WiFi network credentials
+            credentials (WiFiCredentials): Credenciales de red WiFi
             
         Returns:
-            BytesIO: Buffer containing the QR code image
+            BytesIO: Buffer conteniendo la imagen del código QR
         """
         try:
-            # Generate WiFi configuration string
+            # Generar cadena de configuración WiFi
             wifi_config = helpers.make_wifi_data(
                 ssid=credentials.ssid,
                 password=credentials.password,
@@ -62,10 +62,10 @@ class QRManager:
                 hidden=False
             )
             
-            # Create QR code
+            # Crear código QR
             qr = segno.make(wifi_config, error='H')
             
-            # Save to buffer
+            # Guardar en buffer
             buffer = BytesIO()
             qr.save(buffer, kind='png', scale=10)
             buffer.seek(0)
@@ -73,51 +73,51 @@ class QRManager:
             return buffer
             
         except Exception as e:
-            logger.error(f"Error generating QR code: {str(e)}")
+            logger.error(f"Error generando código QR: {str(e)}")
             raise
             
     def add_logo(self, qr_buffer: BytesIO, property_type: str) -> BytesIO:
         """
-        Add a logo to the center of the QR code.
+        Agregar un logotipo al centro del código QR.
         
         Args:
-            qr_buffer (BytesIO): Buffer containing the QR code image
-            property_type (str): Property identifier for logo selection
+            qr_buffer (BytesIO): Buffer conteniendo la imagen del código QR
+            property_type (str): Identificador de propiedad para selección de logotipo
             
         Returns:
-            BytesIO: Buffer containing the modified QR code
+            BytesIO: Buffer conteniendo el código QR modificado
         """
         try:
-            # Normalize and validate property type
+            # Normalizar y validar tipo de propiedad
             property_type = self._normalize_property_type(property_type)
             if not property_type or property_type not in self.LOGO_PATHS:
-                logger.warning(f"Invalid property type: {property_type}")
+                logger.warning(f"Tipo de propiedad inválido: {property_type}")
                 return qr_buffer
                 
             logo_path = self.LOGO_PATHS[property_type]
             if not os.path.exists(logo_path):
-                logger.error(f"Logo file not found: {logo_path}")
+                logger.error(f"Archivo de logo no encontrado: {logo_path}")
                 return qr_buffer
                 
-            # Open images
+            # Abrir imágenes
             qr_img = Image.open(qr_buffer).convert('RGBA')
             logo_img = Image.open(logo_path).convert('RGBA')
             
-            # Calculate logo size (25% of QR code)
+            # Calcular tamaño del logo (25% del código QR)
             logo_size = min(qr_img.size) // 4
             logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
             
-            # Calculate position for center placement
+            # Calcular posición para centrado
             x_pos = (qr_img.size[0] - logo_img.size[0]) // 2
             y_pos = (qr_img.size[1] - logo_img.size[1]) // 2
             
-            # Create mask for smooth edges
+            # Crear máscara para bordes suaves
             mask = logo_img.split()[3]
             
-            # Paste logo
+            # Pegar logo
             qr_img.paste(logo_img, (x_pos, y_pos), mask)
             
-            # Save result
+            # Guardar resultado
             output = BytesIO()
             qr_img.save(output, format='PNG')
             output.seek(0)
@@ -125,31 +125,31 @@ class QRManager:
             return output
             
         except Exception as e:
-            logger.error(f"Error adding logo to QR: {str(e)}")
+            logger.error(f"Error agregando logo al QR: {str(e)}")
             return qr_buffer
             
     def add_text(self, qr_buffer: BytesIO, ssid: str, password: Optional[str] = None) -> BytesIO:
         """
-        Add SSID and password text below the QR code.
+        Agregar texto de SSID y contraseña debajo del código QR.
         
         Args:
-            qr_buffer (BytesIO): Buffer containing the QR code image
-            ssid (str): Network SSID
-            password (Optional[str]): Network password
+            qr_buffer (BytesIO): Buffer conteniendo la imagen del código QR
+            ssid (str): SSID de la red
+            password (Optional[str]): Contraseña de la red
             
         Returns:
-            BytesIO: Buffer containing the modified QR code
+            BytesIO: Buffer conteniendo el código QR modificado
         """
         try:
             qr_img = Image.open(qr_buffer)
             width, height = qr_img.size
             
-            # Create new image with space for text
-            new_height = height + 60  # Add 60px for text
+            # Crear nueva imagen con espacio para texto
+            new_height = height + 60  # Agregar 60px para texto
             new_img = Image.new('RGB', (width, new_height), 'white')
             new_img.paste(qr_img, (0, 0))
             
-            # Configure font
+            # Configurar fuente
             try:
                 font = ImageFont.truetype("calibrib.ttf", 22)
             except:
@@ -157,22 +157,22 @@ class QRManager:
                 
             draw = ImageDraw.Draw(new_img)
             
-            # Add SSID text
+            # Agregar texto SSID
             text = f"SSID: {ssid}"
             bbox = draw.textbbox((0, 0), text, font=font)
             text_width = bbox[2] - bbox[0]
             x_pos = (width - text_width) / 2
             draw.text((x_pos, height + 5), text, font=font, fill="black")
             
-            # Add password text if provided
+            # Agregar texto de contraseña si se proporciona
             if password:
-                text = f"Pass: {password}"
+                text = f"Contraseña: {password}"
                 bbox = draw.textbbox((0, 0), text, font=font)
                 text_width = bbox[2] - bbox[0]
                 x_pos = (width - text_width) / 2
                 draw.text((x_pos, height + 30), text, font=font, fill="black")
             
-            # Save result
+            # Guardar resultado
             output = BytesIO()
             new_img.save(output, format='PNG')
             output.seek(0)
@@ -180,19 +180,19 @@ class QRManager:
             return output
             
         except Exception as e:
-            logger.error(f"Error adding text to QR: {str(e)}")
+            logger.error(f"Error agregando texto al QR: {str(e)}")
             return qr_buffer
             
     def save_qr(self, qr_buffer: BytesIO, filename: str) -> str:
         """
-        Save the QR code to a file.
+        Guardar el código QR en un archivo.
         
         Args:
-            qr_buffer (BytesIO): Buffer containing the QR code image
-            filename (str): Name for the output file
+            qr_buffer (BytesIO): Buffer conteniendo la imagen del código QR
+            filename (str): Nombre para el archivo de salida
             
         Returns:
-            str: Path to the saved file
+            str: Ruta al archivo guardado
         """
         try:
             if not filename.endswith('.png'):
@@ -203,23 +203,23 @@ class QRManager:
             with open(output_path, 'wb') as f:
                 f.write(qr_buffer.getvalue())
                 
-            logger.info(f"QR code saved to: {output_path}")
+            logger.info(f"Código QR guardado en: {output_path}")
             return output_path
             
         except Exception as e:
-            logger.error(f"Error saving QR code: {str(e)}")
+            logger.error(f"Error guardando código QR: {str(e)}")
             raise
             
     @staticmethod
     def _normalize_property_type(property_type: Optional[str]) -> Optional[str]:
         """
-        Normalize property type to standard format.
+        Normalizar tipo de propiedad a formato estándar.
         
         Args:
-            property_type (Optional[str]): Property type to normalize
+            property_type (Optional[str]): Tipo de propiedad a normalizar
             
         Returns:
-            Optional[str]: Normalized property type or None if invalid
+            Optional[str]: Tipo de propiedad normalizado o None si es inválido
         """
         if not property_type:
             return None
