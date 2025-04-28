@@ -449,7 +449,7 @@ class MainWindow:
         ttk.Label(input_frame, text="Propiedad:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
         self.manual_property = tk.StringVar()
         ttk.Combobox(input_frame, textvariable=self.manual_property,
-                    values=["VLEV", "VLE", "VDPF", "VG", "VDP"],
+                    values=["VLE", "VDPF"],
                     state="readonly").grid(row=3, column=1, padx=5, pady=2)
         
         # Botón de generar
