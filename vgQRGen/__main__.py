@@ -1,7 +1,7 @@
 """
-Main entry point for the QR Generator application.
+Punto de entrada principal para la aplicación Generadora de QR.
 
-This module initializes the logging system and starts the GUI application.
+Este módulo inicializa el sistema de registro y arranca la aplicación GUI.
 """
 
 import sys
@@ -10,31 +10,31 @@ from .utils.logging_utils import LogManager
 from .gui.main_window import MainWindow
 
 def parse_args():
-    """Parse command line arguments."""
+    """Analizar argumentos de línea de comandos."""
     parser = argparse.ArgumentParser(
-        description="WiFi QR Code Generator - GUI and CLI tool"
+        description="Generador de Códigos QR WiFi - Herramienta GUI y CLI"
     )
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable debug logging"
+        help="Habilitar registro de depuración"
     )
     return parser.parse_args()
 
 def main():
-    """Main entry point for the application."""
+    """Punto de entrada principal para la aplicación."""
     args = parse_args()
     
-    # Initialize logging
+    # Inicializar registro
     LogManager(debug=args.debug)
     
     try:
-        # Start GUI
+        # Iniciar GUI
         app = MainWindow()
         app.run()
         return 0
     except Exception as e:
-        print(f"Error starting application: {str(e)}", file=sys.stderr)
+        print(f"Error al iniciar la aplicación: {str(e)}", file=sys.stderr)
         return 1
 
 if __name__ == "__main__":
