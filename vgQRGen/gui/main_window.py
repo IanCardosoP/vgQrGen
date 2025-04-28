@@ -212,6 +212,11 @@ class MainWindow:
         self.root.title("Generador de QR de Wifi VillaGroup")
         self.root.geometry("800x600")
         
+        # Establecer tamaño mínimo de la ventana
+        # El ancho mínimo considera: columna izquierda (300px) + columna derecha con QR (300px) + padding
+        # El alto mínimo considera: altura del QR (300px) + espacio para controles y padding
+        self.root.minsize(650, 500)
+        
         # Inicializar gestores
         self.qr_manager = QRManager()
         self.excel_manager = None
@@ -221,9 +226,19 @@ class MainWindow:
         
     def _setup_ui(self):
         """Configurar todos los componentes de la UI."""
-        # Crear notebook para pestañas
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Crear marco principal para las dos columnas
+        main_frame = ttk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(5,0))  # Ajustado padding vertical
+        main_frame.grid_columnconfigure(0, weight=1)  # Columna izquierda expandible
+        main_frame.grid_columnconfigure(1, weight=0)  # Columna derecha fija
+        
+        # Columna izquierda - Controles
+        left_column = ttk.Frame(main_frame)
+        left_column.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        
+        # Notebook para pestañas en la columna izquierda
+        notebook = ttk.Notebook(left_column)
+        notebook.pack(fill=tk.BOTH, expand=True)
         
         # Pestaña de Excel
         excel_frame = ttk.Frame(notebook)
@@ -235,8 +250,30 @@ class MainWindow:
         notebook.add(manual_frame, text="Entrada Manual")
         self._setup_manual_tab(manual_frame)
         
-        # Botones comunes
+        # Columna derecha - Vista previa (ancho y alto fijo)
+        right_column = ttk.Frame(main_frame, width=300, height=400)
+        right_column.grid(row=0, column=1, sticky="n", padx=(5, 0))
+        right_column.grid_propagate(False)  # Evita que el frame cambie de tamaño
+        
+        # Marco de vista previa
+        preview_frame = ttk.LabelFrame(right_column, text="Vista Previa QR", padding=10)
+        preview_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self.preview_label = ttk.Label(preview_frame)
+        self.preview_label.pack(pady=10)
+        
+        # Botones comunes en la parte inferior de la ventana principal
         self._setup_common_buttons()
+        
+    def _setup_common_buttons(self):
+        """Configurar botones comunes para ambas pestañas."""
+        button_frame = ttk.Frame(self.root)
+        button_frame.pack(fill=tk.X, padx=10, pady=5, side=tk.BOTTOM)  # Cambiado a BOTTOM
+        
+        ttk.Button(button_frame, text="Abrir Carpeta de Códigos", 
+                  command=self._open_codes_folder).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Abrir Último QR", 
+                  command=self._open_last_qr).pack(side=tk.LEFT)
         
     def _setup_excel_tab(self, parent: ttk.Frame):
         """Configurar la pestaña de importación de Excel."""
@@ -244,9 +281,14 @@ class MainWindow:
         file_frame = ttk.LabelFrame(parent, text="Archivo Excel", padding=5)
         file_frame.pack(fill=tk.X, padx=5, pady=5)
         
+        file_content_frame = ttk.Frame(file_frame)
+        file_content_frame.pack(fill=tk.X, expand=True)
+        file_content_frame.grid_columnconfigure(0, weight=1)  # La entrada se expandirá
+        file_content_frame.grid_columnconfigure(1, weight=0)  # El botón mantendrá su tamaño
+        
         self.file_path = tk.StringVar()
-        ttk.Entry(file_frame, textvariable=self.file_path, width=50, state="readonly").pack(side=tk.LEFT, padx=5)
-        ttk.Button(file_frame, text="Examinar", command=self._browse_excel).pack(side=tk.LEFT)
+        ttk.Entry(file_content_frame, textvariable=self.file_path, state="readonly").grid(row=0, column=0, sticky="ew", padx=5)
+        ttk.Button(file_content_frame, text="Examinar", command=self._browse_excel).grid(row=0, column=1, padx=5)
         
         # Marco de opciones de Excel
         self.options_frame = ttk.LabelFrame(parent, text="Opciones de Excel", padding=5)
@@ -254,13 +296,15 @@ class MainWindow:
         
         # Selección de hoja
         sheet_frame = ttk.Frame(self.options_frame)
-        sheet_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(sheet_frame, text="Hoja:").pack(side=tk.LEFT, padx=5)
+        sheet_frame.pack(fill=tk.X, expand=True)
+        sheet_frame.grid_columnconfigure(1, weight=1)  # La columna del combobox se expandirá
+        
+        ttk.Label(sheet_frame, text="Hoja:").grid(row=0, column=0, sticky="w", padx=5)
         self.sheet_var = tk.StringVar()
-        self.sheet_combo = ttk.Combobox(sheet_frame, textvariable=self.sheet_var, state="disabled", width=40)
-        self.sheet_combo.pack(side=tk.LEFT, padx=5)
+        self.sheet_combo = ttk.Combobox(sheet_frame, textvariable=self.sheet_var, state="disabled")
+        self.sheet_combo.grid(row=0, column=1, sticky="ew", padx=5)
         self.load_sheet_btn = ttk.Button(sheet_frame, text="Cargar Hoja", command=self._load_selected_sheet, state="disabled")
-        self.load_sheet_btn.pack(side=tk.LEFT, padx=5)
+        self.load_sheet_btn.grid(row=0, column=2, padx=5)
         
         # Botón de selección manual de columnas
         self.manual_cols_btn = ttk.Button(
@@ -275,21 +319,24 @@ class MainWindow:
         self.search_frame = ttk.LabelFrame(parent, text="Buscar Habitación", padding=5)
         self.search_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        self.room_number = tk.StringVar()
-        self.room_entry = ttk.Entry(self.search_frame, textvariable=self.room_number, width=20, state="disabled")
-        self.room_entry.pack(side=tk.LEFT, padx=5)
+        search_content_frame = ttk.Frame(self.search_frame)
+        search_content_frame.pack(fill=tk.X, expand=True)
+        search_content_frame.grid_columnconfigure(0, weight=1)  # La entrada se expandirá
         
-        self.generate_btn = ttk.Button(self.search_frame, text="Generar QR", 
+        self.room_number = tk.StringVar()
+        self.room_entry = ttk.Entry(search_content_frame, textvariable=self.room_number, state="disabled")
+        self.room_entry.grid(row=0, column=0, sticky="ew", padx=5)
+        
+        button_frame = ttk.Frame(search_content_frame)
+        button_frame.grid(row=0, column=1, sticky="e")
+        
+        self.generate_btn = ttk.Button(button_frame, text="Generar QR", 
                                      command=self._generate_room_qr, state="disabled")
         self.generate_btn.pack(side=tk.LEFT)
         
-        self.generate_all_btn = ttk.Button(self.search_frame, text="Generar Todos", 
+        self.generate_all_btn = ttk.Button(button_frame, text="Generar Todos", 
                                          command=self._generate_all_qr, state="disabled")
         self.generate_all_btn.pack(side=tk.LEFT, padx=5)
-        
-        # Vista previa
-        self.preview_label = ttk.Label(parent, text="Vista Previa QR")
-        self.preview_label.pack(pady=10)
         
     def _browse_excel(self):
         """Abrir diálogo de archivo para seleccionar archivo Excel."""
@@ -402,27 +449,13 @@ class MainWindow:
         ttk.Label(input_frame, text="Propiedad:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
         self.manual_property = tk.StringVar()
         ttk.Combobox(input_frame, textvariable=self.manual_property,
-                    values=["VLEV", "VLE", "VDPF", "VG", "VDP"],
+                    values=["VLE", "VDPF"],
                     state="readonly").grid(row=3, column=1, padx=5, pady=2)
         
         # Botón de generar
         ttk.Button(input_frame, text="Generar QR", 
                   command=self._generate_manual_qr).grid(row=4, column=0, columnspan=2, pady=10)
                   
-        # Vista previa
-        self.manual_preview_label = ttk.Label(parent, text="Vista Previa QR")
-        self.manual_preview_label.pack(pady=10)
-        
-    def _setup_common_buttons(self):
-        """Configurar botones comunes para ambas pestañas."""
-        button_frame = ttk.Frame(self.root)
-        button_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Button(button_frame, text="Abrir Carpeta de Códigos", 
-                  command=self._open_codes_folder).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Abrir Último QR", 
-                  command=self._open_last_qr).pack(side=tk.LEFT)
-        
     def _generate_room_qr(self):
         """Generar código QR para una habitación específica desde Excel."""
         if not self.excel_manager:
@@ -511,13 +544,8 @@ class MainWindow:
             photo = ImageTk.PhotoImage(image)
             
             # Actualizar vista previa en la pestaña actual
-            if self.root.focus_get():
-                if str(self.root.focus_get()).startswith(str(self.preview_label)):
-                    self.preview_label.configure(image=photo)
-                    self.preview_label.image = photo
-                else:
-                    self.manual_preview_label.configure(image=photo)
-                    self.manual_preview_label.image = photo
+            self.preview_label.configure(image=photo)
+            self.preview_label.image = photo
                     
         except Exception as e:
             logger.error(f"Error actualizando vista previa: {str(e)}")
