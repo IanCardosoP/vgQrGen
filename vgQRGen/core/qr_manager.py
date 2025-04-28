@@ -104,7 +104,10 @@ class QRManager:
             logo_img = Image.open(logo_path).convert('RGBA')
             
             # Calcular tamaño del logo (25% del código QR)
-            logo_size = min(qr_img.size) // 4
+            logo_size = min(qr_img.size) // 3.7
+            # 4 = 25% del tamaño del QR (ideal)
+            # 3.5 = 28.5% del tamaño del QR (tamaño recomendado)
+            # 3 = 33% del tamaño del QR (máximo recomendado)
             logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
             
             # Calcular posición para centrado
@@ -151,7 +154,7 @@ class QRManager:
             
             # Configurar fuente
             try:
-                font = ImageFont.truetype("calibrib.ttf", 22)
+                font = ImageFont.truetype("calibrib.ttf", 26)
             except:
                 font = ImageFont.load_default()
                 
@@ -166,7 +169,7 @@ class QRManager:
             
             # Agregar texto de contraseña si se proporciona
             if password:
-                text = f"Contraseña: {password}"
+                text = f"Password: {password}"
                 bbox = draw.textbbox((0, 0), text, font=font)
                 text_width = bbox[2] - bbox[0]
                 x_pos = (width - text_width) / 2
