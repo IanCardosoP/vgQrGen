@@ -14,6 +14,7 @@ from typing import Optional, Dict
 from ..core.excel_manager import ExcelManager
 from ..core.qr_manager import QRManager, WiFiCredentials
 from ..utils.logging_utils import LogManager
+from ..utils.config_manager import ConfigManager
 
 logger = LogManager.get_logger(__name__)
 
@@ -220,9 +221,45 @@ class MainWindow:
         # Inicializar gestores
         self.qr_manager = QRManager()
         self.excel_manager = None
+        self.config_manager = ConfigManager()
         
         # Configurar componentes de la UI
         self._setup_ui()
+        
+        # Cargar último archivo si existe
+        self._load_last_file()
+
+    def _load_last_file(self):
+        """Cargar el último archivo Excel usado."""
+        recent_files = self.config_manager.get_recent_files()
+        if recent_files:
+            last_file = recent_files[0]
+            self._load_excel_file(last_file["path"])
+
+    def _load_excel_file(self, filename: str):
+        """Cargar un archivo Excel específico."""
+        self.file_path.set(filename)
+        self.excel_manager = ExcelManager(filename)
+        
+        # Intentar cargar el libro
+        success, error_msg = self.excel_manager.load_workbook()
+        if not success:
+            messagebox.showerror("Error", error_msg)
+            self._reset_excel_ui()
+            return
+            
+        # Habilitar y llenar selección de hoja
+        sheets = self.excel_manager.get_sheet_names()
+        self.sheet_combo['values'] = sheets
+        
+        # Intentar seleccionar última hoja usada
+        last_sheet = self.config_manager.get_last_sheet(filename)
+        if last_sheet and last_sheet in sheets:
+            self.sheet_combo.set(last_sheet)
+        else:
+            self.sheet_combo.set(sheets[0] if sheets else "")
+            
+        self._enable_sheet_selection()
         
     def _setup_ui(self):
         """Configurar todos los componentes de la UI."""
@@ -304,9 +341,19 @@ class MainWindow:
         file_content_frame.grid_columnconfigure(1, weight=0)
         
         self.file_path = tk.StringVar()
-        ttk.Entry(file_content_frame, textvariable=self.file_path, state="readonly").grid(row=0, column=0, sticky="ew", padx=5)
-        ttk.Button(file_content_frame, text="Examinar", command=self._browse_excel).grid(row=0, column=1, padx=5)
+        self.file_combo = ttk.Combobox(
+            file_content_frame, 
+            textvariable=self.file_path, 
+            state="readonly"
+        )
+        self.file_combo.grid(row=0, column=0, sticky="ew", padx=5)
+        self.file_combo.bind('<<ComboboxSelected>>', self._on_file_selected)
         
+        # Actualizar valores del Combobox con archivos recientes
+        self._update_recent_files_list()
+        
+        ttk.Button(file_content_frame, text="Examinar", command=self._browse_new_excel).grid(row=0, column=1, padx=5)
+
         # Marco de opciones de Excel
         self.options_frame = ttk.LabelFrame(parent, text="Opciones de Excel", padding=5)
         self.options_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -322,10 +369,14 @@ class MainWindow:
         self.sheet_combo.grid(row=0, column=1, sticky="ew", padx=5)
         self.load_sheet_btn = ttk.Button(sheet_frame, text="Cargar Hoja", command=self._load_selected_sheet, state="disabled")
         self.load_sheet_btn.grid(row=0, column=2, padx=5)
-        
+
+        # Frame para opciones de seguridad y propiedad
+        options_container = ttk.Frame(self.options_frame)
+        options_container.pack(fill=tk.X, expand=True, pady=10)
+
         # Frame para selección de método de seguridad
-        security_frame = ttk.Frame(self.options_frame)
-        security_frame.pack(fill=tk.X, expand=True, pady=10)
+        security_frame = ttk.Frame(options_container)
+        security_frame.pack(fill=tk.X, expand=True, pady=(0,5))
         
         ttk.Label(security_frame, text="Método de Seguridad por Defecto:").pack(side=tk.LEFT, padx=5)
         
@@ -345,8 +396,31 @@ class MainWindow:
             )
             radio.pack(side=tk.LEFT, padx=10)
             self.security_radios.append(radio)
+
+        # Frame para selección de propiedad
+        property_frame = ttk.Frame(options_container)
+        property_frame.pack(fill=tk.X, expand=True)
+        
+        ttk.Label(property_frame, text="Propiedad por Defecto:").pack(side=tk.LEFT, padx=5)
+        
+        # Variable y radio buttons para propiedad
+        self.property_var = tk.StringVar(value="Sin Logo")
+        self.property_radios = []
+        
+        property_radio_frame = ttk.Frame(property_frame)
+        property_radio_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        for property_type in ["VLE", "VG", "Sin Logo"]:
+            radio = ttk.Radiobutton(
+                property_radio_frame,
+                text=property_type,
+                variable=self.property_var,
+                value=property_type
+            )
+            radio.pack(side=tk.LEFT, padx=10)
+            self.property_radios.append(radio)
             
-        # Etiqueta informativa de prioridad de seguridad
+        # Etiquetas informativas de prioridad
         self.security_priority_label = ttk.Label(
             self.options_frame,
             text="La prioridad en el método de seguridad la tiene el fichero cargado.",
@@ -354,8 +428,18 @@ class MainWindow:
             font=("", 8, "italic")
         )
         self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-        # Inicialmente ocultar la etiqueta
+        
+        self.property_priority_label = ttk.Label(
+            self.options_frame,
+            text="La prioridad en la propiedad la tiene el fichero cargado.",
+            foreground="gray",
+            font=("", 8, "italic")
+        )
+        self.property_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+        
+        # Inicialmente ocultar las etiquetas
         self.security_priority_label.pack_forget()
+        self.property_priority_label.pack_forget()
         
         # Botón de selección manual de columnas
         self.manual_cols_btn = ttk.Button(
@@ -391,27 +475,37 @@ class MainWindow:
         
     def _browse_excel(self):
         """Abrir diálogo de archivo para seleccionar archivo Excel."""
+        # Crear menú de archivos recientes
+        recent_menu = tk.Menu(self.root, tearoff=0)
+        recent_files = self.config_manager.get_recent_files()
+        
+        for recent in recent_files:
+            file_name = os.path.basename(recent["path"])
+            recent_menu.add_command(
+                label=file_name,
+                command=lambda p=recent["path"]: self._load_excel_file(p)
+            )
+        
+        if recent_files:
+            recent_menu.add_separator()
+        recent_menu.add_command(label="Examinar...", command=self._browse_new_excel)
+        
+        # Mostrar menú en la posición del botón
+        try:
+            recent_menu.tk_popup(
+                self.root.winfo_pointerx(),
+                self.root.winfo_pointery()
+            )
+        finally:
+            recent_menu.grab_release()
+            
+    def _browse_new_excel(self):
+        """Abrir diálogo para seleccionar nuevo archivo Excel."""
         filename = filedialog.askopenfilename(
             filetypes=[("Archivos Excel", "*.xlsx *.xls"), ("Todos los archivos", "*.*")]
         )
-        if not filename:
-            return
-            
-        self.file_path.set(filename)
-        self.excel_manager = ExcelManager(filename)
-        
-        # Intentar cargar el libro
-        success, error_msg = self.excel_manager.load_workbook()
-        if not success:
-            messagebox.showerror("Error", error_msg)
-            self._reset_excel_ui()
-            return
-            
-        # Habilitar y llenar selección de hoja
-        sheets = self.excel_manager.get_sheet_names()
-        self.sheet_combo['values'] = sheets
-        self.sheet_combo.set(sheets[0] if sheets else "")
-        self._enable_sheet_selection()
+        if filename:
+            self._load_excel_file(filename)
             
     def _enable_sheet_selection(self):
         """Habilitar controles de selección de hoja."""
@@ -435,6 +529,9 @@ class MainWindow:
                 self._enable_manual_column_selection()
             return
             
+        # Guardar la última hoja seleccionada
+        self.config_manager.add_recent_file(self.excel_manager.file_path, sheet_name)
+        
         # Habilitar controles de búsqueda de habitación
         self._enable_room_search()
         
@@ -446,6 +543,12 @@ class MainWindow:
             self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
         else:
             self.security_priority_label.pack_forget()
+            
+        # Mostrar etiqueta de prioridad si hay columna de propiedad
+        if self.excel_manager.columns.property_type is not None:
+            self.property_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+        else:
+            self.property_priority_label.pack_forget()
             
     def _update_security_radio_state(self):
         """Actualizar seguridad por defecto al cargar una hoja."""
@@ -466,6 +569,7 @@ class MainWindow:
     def _reset_excel_ui(self):
         """Restablecer controles de UI de Excel al estado inicial."""
         self.file_path.set("")
+        self.file_combo['values'] = []
         self.sheet_combo.set("")
         self.sheet_combo['values'] = []
         self.sheet_combo['state'] = 'disabled'
@@ -475,7 +579,32 @@ class MainWindow:
         self.generate_btn['state'] = 'disabled'
         self.generate_all_btn['state'] = 'disabled'
         self.room_number.set("")
+        # Actualizar lista de archivos recientes
+        self._update_recent_files_list()
         
+    def _update_recent_files_list(self):
+        """Actualizar lista de archivos recientes en el Combobox."""
+        recent_files = self.config_manager.get_recent_files()
+        
+        if recent_files:
+            # Crear lista de nombres de archivo para mostrar
+            display_values = [os.path.basename(f["path"]) for f in recent_files]
+            
+            # Configurar el Combobox para mostrar los nombres de archivo
+            self.file_combo['values'] = display_values
+            
+            # Almacenar las rutas completas para su uso posterior
+            self._file_paths = {os.path.basename(f["path"]): f["path"] for f in recent_files}
+            
+    def _on_file_selected(self, event):
+        """Manejar la selección de un archivo desde el Combobox."""
+        selected_name = self.file_combo.get()
+        if selected_name and hasattr(self, '_file_paths'):
+            full_path = self._file_paths.get(selected_name)
+            if full_path:
+                self.file_path.set(full_path)
+                self._load_excel_file(full_path)
+            
     def _show_column_dialog(self):
         """Mostrar diálogo para selección manual de columnas."""
         dialog = ColumnSelectionDialog(self.root)
@@ -491,41 +620,86 @@ class MainWindow:
                     self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
                 else:
                     self.security_priority_label.pack_forget()
+                    
+                # Mostrar etiqueta de prioridad si se configuró columna de propiedad
+                if 'property_type' in dialog.column_indices:
+                    self.property_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+                else:
+                    self.property_priority_label.pack_forget()
             else:
                 messagebox.showerror("Error", "Error al configurar columnas")
                 
     def _setup_manual_tab(self, parent: ttk.Frame):
         """Configurar la pestaña de entrada manual."""
-        input_frame = ttk.LabelFrame(parent, text="Detalles de Red", padding=5)
-        input_frame.pack(fill=tk.X, padx=5, pady=5)
+        # Frame principal con padding consistente
+        input_frame = ttk.LabelFrame(parent, text="Detalles de Red", padding=10)
+        input_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        # Frame para campos de entrada
+        fields_frame = ttk.Frame(input_frame)
+        fields_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        fields_frame.grid_columnconfigure(1, weight=1)  # La columna del campo se expandirá
         
-        # SSID
-        ttk.Label(input_frame, text="SSID:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+        # SSID con alineación izquierda y ancho controlado
+        ttk.Label(fields_frame, text="SSID:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10), pady=5)
         self.manual_ssid = tk.StringVar()
-        ttk.Entry(input_frame, textvariable=self.manual_ssid, width=30).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Entry(fields_frame, textvariable=self.manual_ssid, width=30).grid(row=0, column=1, sticky="w", pady=5)
         
-        # Contraseña
-        ttk.Label(input_frame, text="Contraseña:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
+        # Contraseña con alineación izquierda y ancho controlado
+        ttk.Label(fields_frame, text="Contraseña:").grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5)
         self.manual_password = tk.StringVar()
-        ttk.Entry(input_frame, textvariable=self.manual_password, width=30).grid(row=1, column=1, padx=5, pady=2)
+        ttk.Entry(fields_frame, textvariable=self.manual_password, width=30).grid(row=1, column=1, sticky="w", pady=5)
         
-        # Encriptación
-        ttk.Label(input_frame, text="Encriptación:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
+        # Frame para las opciones de seguridad con padding superior
+        security_frame = ttk.Frame(input_frame)
+        security_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
+        
+        ttk.Label(security_frame, text="Método de Seguridad:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Variable y radio buttons para método de seguridad
         self.manual_encryption = tk.StringVar(value="WPA2")
-        ttk.Combobox(input_frame, textvariable=self.manual_encryption, 
-                    values=["WPA", "WPA2", "WEP", "nopass"], 
-                    state="readonly").grid(row=2, column=1, padx=5, pady=2)
         
-        # Propiedad
-        ttk.Label(input_frame, text="Propiedad:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
-        self.manual_property = tk.StringVar()
-        ttk.Combobox(input_frame, textvariable=self.manual_property,
-                    values=["VLE", "VDPF"],
-                    state="readonly").grid(row=3, column=1, padx=5, pady=2)
+        radio_frame = ttk.Frame(security_frame)
+        radio_frame.pack(side=tk.LEFT, fill=tk.X)
         
-        # Botón de generar
-        ttk.Button(input_frame, text="Generar QR", 
-                  command=self._generate_manual_qr).grid(row=4, column=0, columnspan=2, pady=10)
+        for security in ["WPA2", "WPA", "WEP", "nopass"]:
+            ttk.Radiobutton(
+                radio_frame,
+                text=security,
+                variable=self.manual_encryption,
+                value=security
+            ).pack(side=tk.LEFT, padx=(0, 15))  # Espaciado uniforme entre radio buttons
+
+        # Frame para las opciones de propiedad
+        property_frame = ttk.Frame(input_frame)
+        property_frame.pack(fill=tk.X, expand=True, pady=(0, 15))
+        
+        ttk.Label(property_frame, text="Propiedad:").pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Variable y radio buttons para propiedad
+        self.manual_property = tk.StringVar(value="Sin Logo")
+        
+        property_radio_frame = ttk.Frame(property_frame)
+        property_radio_frame.pack(side=tk.LEFT, fill=tk.X)
+        
+        for property_type in ["VLE", "VG", "Sin Logo"]:
+            ttk.Radiobutton(
+                property_radio_frame,
+                text=property_type,
+                variable=self.manual_property,
+                value=property_type
+            ).pack(side=tk.LEFT, padx=(0, 15))  # Espaciado uniforme entre radio buttons
+        
+        # Botón de generar centrado
+        button_frame = ttk.Frame(input_frame)
+        button_frame.pack(fill=tk.X, expand=True)
+        button_frame.grid_columnconfigure(0, weight=1)  # Para centrar el botón
+        
+        ttk.Button(
+            button_frame,
+            text="Generar QR",
+            command=self._generate_manual_qr
+        ).grid(row=0, column=0)
                   
     def _generate_room_qr(self):
         """Generar código QR para una habitación específica desde Excel."""
@@ -548,6 +722,10 @@ class MainWindow:
             if credentials.encryption is None:
                 credentials.encryption = self.security_var.get()
 
+            # Solo usar el valor de los radio buttons si no hay valor de propiedad en el Excel
+            if credentials.property_type is None:
+                credentials.property_type = self.property_var.get()
+
             self._generate_and_preview_qr(credentials)
         except Exception as e:
             logger.error(f"Error generando QR para la habitación {room}: {str(e)}")
@@ -567,10 +745,15 @@ class MainWindow:
                 
             # Procesar cada habitación individualmente
             selected_security = self.security_var.get()
+            selected_property = self.property_var.get()
             for cred in credentials_list:
                 # Solo usar el valor seleccionado si no hay valor de encriptación en el Excel
                 if cred.encryption is None:
                     cred.encryption = selected_security
+                    
+                # Solo usar el valor seleccionado si no hay valor de propiedad en el Excel
+                if cred.property_type is None:
+                    cred.property_type = selected_property
                     
                 self._generate_and_preview_qr(cred, show_preview=False)
                 

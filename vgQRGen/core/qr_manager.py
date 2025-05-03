@@ -232,4 +232,6 @@ class QRManager:
             return 'VLEV'
         elif property_type in ('VDPF', 'VG', 'VDP'):
             return 'VG'
+        elif property_type in ('SIN LOGO', 'NONE', 'NO LOGO'):
+            return None
         return None
