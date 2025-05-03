@@ -210,12 +210,12 @@ class MainWindow:
         """Inicializar la ventana principal y sus componentes."""
         self.root = tk.Tk()
         self.root.title("Generador de QR de Wifi VillaGroup")
-        self.root.geometry("800x600")
+        self.root.geometry("900x500")  # Ventana inicial más grande
         
         # Establecer tamaño mínimo de la ventana
         # El ancho mínimo considera: columna izquierda (300px) + columna derecha con QR (300px) + padding
         # El alto mínimo considera: altura del QR (300px) + espacio para controles y padding
-        self.root.minsize(650, 500)
+        self.root.minsize(900, 500)
         
         # Inicializar gestores
         self.qr_manager = QRManager()
@@ -255,12 +255,29 @@ class MainWindow:
         right_column.grid(row=0, column=1, sticky="n", padx=(5, 0))
         right_column.grid_propagate(False)  # Evita que el frame cambie de tamaño
         
-        # Marco de vista previa
+        # Marco de vista previa con tamaño fijo inicial
         preview_frame = ttk.LabelFrame(right_column, text="Vista Previa QR", padding=10)
         preview_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Frame para contener la imagen del QR
         self.preview_label = ttk.Label(preview_frame)
         self.preview_label.pack(pady=10)
+        
+        # Etiqueta para mostrar la configuración del QR
+        self.config_label = ttk.Label(
+            preview_frame,
+            text="",
+            justify=tk.LEFT,
+            font=("", 8),
+            wraplength=280  # Para permitir múltiples líneas si es necesario
+        )
+        self.config_label.pack(pady=(0, 10), padx=5)
+        
+        # Crear una imagen en blanco del tamaño deseado para establecer las dimensiones iniciales
+        blank_image = Image.new('RGB', (300, 300), 'white')
+        photo = ImageTk.PhotoImage(blank_image)
+        self.preview_label.configure(image=photo)
+        self.preview_label.image = photo
         
         # Botones comunes en la parte inferior de la ventana principal
         self._setup_common_buttons()
@@ -283,8 +300,8 @@ class MainWindow:
         
         file_content_frame = ttk.Frame(file_frame)
         file_content_frame.pack(fill=tk.X, expand=True)
-        file_content_frame.grid_columnconfigure(0, weight=1)  # La entrada se expandirá
-        file_content_frame.grid_columnconfigure(1, weight=0)  # El botón mantendrá su tamaño
+        file_content_frame.grid_columnconfigure(0, weight=1)
+        file_content_frame.grid_columnconfigure(1, weight=0)
         
         self.file_path = tk.StringVar()
         ttk.Entry(file_content_frame, textvariable=self.file_path, state="readonly").grid(row=0, column=0, sticky="ew", padx=5)
@@ -297,7 +314,7 @@ class MainWindow:
         # Selección de hoja
         sheet_frame = ttk.Frame(self.options_frame)
         sheet_frame.pack(fill=tk.X, expand=True)
-        sheet_frame.grid_columnconfigure(1, weight=1)  # La columna del combobox se expandirá
+        sheet_frame.grid_columnconfigure(1, weight=1)
         
         ttk.Label(sheet_frame, text="Hoja:").grid(row=0, column=0, sticky="w", padx=5)
         self.sheet_var = tk.StringVar()
@@ -306,10 +323,44 @@ class MainWindow:
         self.load_sheet_btn = ttk.Button(sheet_frame, text="Cargar Hoja", command=self._load_selected_sheet, state="disabled")
         self.load_sheet_btn.grid(row=0, column=2, padx=5)
         
+        # Frame para selección de método de seguridad
+        security_frame = ttk.Frame(self.options_frame)
+        security_frame.pack(fill=tk.X, expand=True, pady=10)
+        
+        ttk.Label(security_frame, text="Método de Seguridad por Defecto:").pack(side=tk.LEFT, padx=5)
+        
+        # Variable y radio buttons para método de seguridad (siempre activos)
+        self.security_var = tk.StringVar(value="WPA2")
+        self.security_radios = []
+        
+        radio_frame = ttk.Frame(security_frame)
+        radio_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        for security in ["WPA2", "WPA", "WEP", "nopass"]:
+            radio = ttk.Radiobutton(
+                radio_frame,
+                text=security,
+                variable=self.security_var,
+                value=security
+            )
+            radio.pack(side=tk.LEFT, padx=10)
+            self.security_radios.append(radio)
+            
+        # Etiqueta informativa de prioridad de seguridad
+        self.security_priority_label = ttk.Label(
+            self.options_frame,
+            text="La prioridad en el método de seguridad la tiene el fichero cargado.",
+            foreground="gray",
+            font=("", 8, "italic")
+        )
+        self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+        # Inicialmente ocultar la etiqueta
+        self.security_priority_label.pack_forget()
+        
         # Botón de selección manual de columnas
         self.manual_cols_btn = ttk.Button(
-            self.options_frame, 
-            text="Configurar Columnas Manualmente", 
+            self.options_frame,
+            text="Configurar Columnas Manualmente",
             command=self._show_column_dialog,
             state="disabled"
         )
@@ -321,7 +372,7 @@ class MainWindow:
         
         search_content_frame = ttk.Frame(self.search_frame)
         search_content_frame.pack(fill=tk.X, expand=True)
-        search_content_frame.grid_columnconfigure(0, weight=1)  # La entrada se expandirá
+        search_content_frame.grid_columnconfigure(0, weight=1)
         
         self.room_number = tk.StringVar()
         self.room_entry = ttk.Entry(search_content_frame, textvariable=self.room_number, state="disabled")
@@ -387,6 +438,20 @@ class MainWindow:
         # Habilitar controles de búsqueda de habitación
         self._enable_room_search()
         
+        # Resetear a WPA2 por defecto al cargar una nueva hoja
+        self.security_var.set("WPA2")
+        
+        # Mostrar etiqueta de prioridad si hay columna de seguridad
+        if self.excel_manager.columns.encryption is not None:
+            self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+        else:
+            self.security_priority_label.pack_forget()
+            
+    def _update_security_radio_state(self):
+        """Actualizar seguridad por defecto al cargar una hoja."""
+        # Reiniciar a WPA2 por defecto al cargar una nueva hoja
+        self.security_var.set("WPA2")
+
     def _enable_manual_column_selection(self):
         """Habilitar selección manual de columnas."""
         self.manual_cols_btn['state'] = 'normal'
@@ -420,6 +485,12 @@ class MainWindow:
             if self.excel_manager.set_columns_manually(dialog.column_indices):
                 messagebox.showinfo("Éxito", "Columnas configuradas exitosamente")
                 self._enable_room_search()
+                
+                # Mostrar etiqueta de prioridad si se configuró columna de encryption
+                if 'encryption' in dialog.column_indices:
+                    self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+                else:
+                    self.security_priority_label.pack_forget()
             else:
                 messagebox.showerror("Error", "Error al configurar columnas")
                 
@@ -469,10 +540,15 @@ class MainWindow:
             
         try:
             credentials = self.excel_manager.get_room_data(room)
-            if credentials:
-                self._generate_and_preview_qr(credentials)
-            else:
+            if not credentials:
                 messagebox.showerror("Error", f"Habitación {room} no encontrada o datos faltantes")
+                return
+
+            # Solo usar el valor de los radio buttons si no hay valor de encriptación en el Excel
+            if credentials.encryption is None:
+                credentials.encryption = self.security_var.get()
+
+            self._generate_and_preview_qr(credentials)
         except Exception as e:
             logger.error(f"Error generando QR para la habitación {room}: {str(e)}")
             messagebox.showerror("Error", str(e))
@@ -489,7 +565,13 @@ class MainWindow:
                 messagebox.showinfo("Info", "No se encontraron habitaciones válidas en el archivo Excel")
                 return
                 
+            # Procesar cada habitación individualmente
+            selected_security = self.security_var.get()
             for cred in credentials_list:
+                # Solo usar el valor seleccionado si no hay valor de encriptación en el Excel
+                if cred.encryption is None:
+                    cred.encryption = selected_security
+                    
                 self._generate_and_preview_qr(cred, show_preview=False)
                 
             messagebox.showinfo("Éxito", 
@@ -531,6 +613,14 @@ class MainWindow:
             # Actualizar vista previa si es necesario
             if show_preview:
                 self._update_preview(buffer)
+                # Actualizar etiqueta de configuración
+                config_text = f"SSID: {credentials.ssid}\n"
+                if credentials.password:
+                    config_text += f"Contraseña: {credentials.password}\n"
+                config_text += f"Seguridad: {credentials.encryption}\n"
+                if credentials.property_type:
+                    config_text += f"Propiedad: {credentials.property_type}"
+                self.config_label.configure(text=config_text)
                 
         except Exception as e:
             logger.error(f"Error generando QR: {str(e)}")

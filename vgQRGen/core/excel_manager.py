@@ -137,7 +137,7 @@ class ExcelManager:
         # Intentar detectar columnas de la fila de encabezado
         self.columns = self._detect_columns()
         if not self.columns:
-            return False, "No se pudieron detectar las columnas requeridas (habitación y SSID) en la fila de encabezado"
+            return False, "No se encuentran las columnas requeridas (habitación y SSID). Por favor, utilice la configuración manual."
             
         return True, ""
             
@@ -223,10 +223,15 @@ class ExcelManager:
         
         for row in self.sheet.iter_rows(min_row=2, values_only=True):
             if str(row[self.columns.room]).strip().upper() == room_number:
+                # Si hay columna de encryption y tiene valor, usarlo; si no, devolver None
+                encryption = None
+                if self.columns.encryption is not None and row[self.columns.encryption]:
+                    encryption = str(row[self.columns.encryption]).strip()
+                    
                 return WiFiCredentials(
                     ssid=str(row[self.columns.ssid]).strip(),
                     password=str(row[self.columns.password]).strip() if self.columns.password is not None and row[self.columns.password] else None,
-                    encryption=str(row[self.columns.encryption]).strip() if self.columns.encryption is not None and row[self.columns.encryption] else "WPA2",
+                    encryption=encryption,  # Puede ser None
                     property_type=str(row[self.columns.property_type]).strip() if self.columns.property_type is not None and row[self.columns.property_type] else None
                 )
         
@@ -249,10 +254,15 @@ class ExcelManager:
             if not row[self.columns.room] or not row[self.columns.ssid]:
                 continue
                 
+            # Si hay columna de encryption y tiene valor, usarlo; si no, devolver None
+            encryption = None
+            if self.columns.encryption is not None and row[self.columns.encryption]:
+                encryption = str(row[self.columns.encryption]).strip()
+                
             cred = WiFiCredentials(
                 ssid=str(row[self.columns.ssid]).strip(),
                 password=str(row[self.columns.password]).strip() if self.columns.password is not None and row[self.columns.password] else None,
-                encryption=str(row[self.columns.encryption]).strip() if self.columns.encryption is not None and row[self.columns.encryption] else "WPA2",
+                encryption=encryption,  # Puede ser None
                 property_type=str(row[self.columns.property_type]).strip() if self.columns.property_type is not None and row[self.columns.property_type] else None
             )
             credentials.append(cred)

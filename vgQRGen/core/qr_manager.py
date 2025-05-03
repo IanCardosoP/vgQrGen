@@ -21,7 +21,7 @@ class WiFiCredentials:
     """Clase de datos para almacenar credenciales de red WiFi."""
     ssid: str
     password: Optional[str] = None
-    encryption: str = "WPA2"
+    encryption: str = "WPA2" # Valor por defecto. 
     property_type: Optional[str] = None
 
 class QRManager:
