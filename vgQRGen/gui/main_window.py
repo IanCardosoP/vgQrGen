@@ -94,10 +94,11 @@ class SheetSelectionDialog(tk.Toplevel):
 class ColumnSelectionDialog(tk.Toplevel):
     """Diálogo para seleccionar columnas de Excel manualmente."""
     
-    def __init__(self, parent):
+    def __init__(self, parent, initial_columns=None):
         super().__init__(parent)
         self.title("Seleccionar Columnas")
         self.column_indices = None
+        self.initial_columns = initial_columns or {}
         
         # Centrar diálogo
         self.geometry("400x350")
@@ -128,7 +129,11 @@ class ColumnSelectionDialog(tk.Toplevel):
         row = 1
         for key, label in labels.items():
             ttk.Label(frame, text=label).grid(row=row, column=0, sticky=tk.W, pady=2)
-            var = tk.StringVar()
+            initial_value = ""
+            # Si tenemos un valor inicial para esta columna, convertirlo a letra de Excel
+            if key in self.initial_columns and self.initial_columns[key] is not None:
+                initial_value = index_to_excel_column(self.initial_columns[key])
+            var = tk.StringVar(value=initial_value)
             entry = ttk.Entry(frame, textvariable=var, width=5)
             entry.grid(row=row, column=1, sticky=tk.W, pady=2)
             self.columns[key] = var
@@ -211,23 +216,41 @@ class MainWindow:
         """Inicializar la ventana principal y sus componentes."""
         self.root = tk.Tk()
         self.root.title("Generador de QR de Wifi VillaGroup")
-        self.root.geometry("900x500")  # Ventana inicial más grande
+        self.root.geometry("935x500")  # Ventana inicial más grande (incrementada en 35px)
         
         # Establecer tamaño mínimo de la ventana
         # El ancho mínimo considera: columna izquierda (300px) + columna derecha con QR (300px) + padding
         # El alto mínimo considera: altura del QR (300px) + espacio para controles y padding
-        self.root.minsize(900, 500)
+        self.root.minsize(935, 500)
+        
+        # Crear estilo para los switches
+        self._setup_styles()
         
         # Inicializar gestores
         self.qr_manager = QRManager()
         self.excel_manager = None
         self.config_manager = ConfigManager()
         
+        # Variables para los toggles de seguridad y propiedad
+        self.use_excel_security = tk.BooleanVar(value=True)
+        self.use_excel_property = tk.BooleanVar(value=True)
+        
         # Configurar componentes de la UI
         self._setup_ui()
         
         # Cargar último archivo si existe
         self._load_last_file()
+        
+    def _setup_styles(self):
+        """Configurar estilos personalizados para la UI."""
+        style = ttk.Style()
+        
+        # Estilo para los switches (checkbuttons con aspecto de interruptor)
+        # Usamos un checkbutton pero le damos aspecto de interruptor con colores
+        style.configure("Switch.TCheckbutton", 
+                        indicatorsize=20,  # Tamaño del indicador
+                        padding=5,
+                        background="#f0f0f0")  # Padding alrededor del switch
 
     def _load_last_file(self):
         """Cargar el último archivo Excel usado."""
@@ -374,17 +397,45 @@ class MainWindow:
         options_container = ttk.Frame(self.options_frame)
         options_container.pack(fill=tk.X, expand=True, pady=10)
 
-        # Frame para selección de método de seguridad
+        # Frame para selección de método de seguridad con toggle switch
         security_frame = ttk.Frame(options_container)
-        security_frame.pack(fill=tk.X, expand=True, pady=(0,5))
+        security_frame.pack(fill=tk.X, expand=True, pady=(0,10))
         
-        ttk.Label(security_frame, text="Método de Seguridad por Defecto:").pack(side=tk.LEFT, padx=5)
+        # Frame para el switch de seguridad
+        security_switch_frame = ttk.Frame(security_frame)
+        security_switch_frame.pack(fill=tk.X, expand=True, side=tk.TOP, pady=(0,5))
         
-        # Variable y radio buttons para método de seguridad (siempre activos)
+        # Switch para usar seguridad del Excel
+        ttk.Label(security_switch_frame, text="Obtener el Tipo de Seguridad de Excel:").pack(side=tk.LEFT, padx=5)
+        security_switch = ttk.Checkbutton(
+            security_switch_frame,
+            variable=self.use_excel_security,
+            text="",
+            style="Switch.TCheckbutton",
+            command=self._update_security_switch_state
+        )
+        security_switch.pack(side=tk.LEFT, padx=5)
+        
+        # Etiqueta que cambia según el estado del switch
+        self.security_switch_label = ttk.Label(
+            security_switch_frame,
+            text="ON - Si hay valores de seguridad en Excel, se usarán.",
+            font=("", 8, "italic"),
+            foreground="green"
+        )
+        self.security_switch_label.pack(side=tk.LEFT, padx=5)
+        
+        # Frame para los radio buttons de seguridad
+        security_radios_frame = ttk.Frame(security_frame)
+        security_radios_frame.pack(fill=tk.X, expand=True, side=tk.TOP)
+        
+        ttk.Label(security_radios_frame, text="Tipo de Seguridad por Defecto:").pack(side=tk.LEFT, padx=5)
+        
+        # Variable y radio buttons para método de seguridad
         self.security_var = tk.StringVar(value="WPA2")
         self.security_radios = []
         
-        radio_frame = ttk.Frame(security_frame)
+        radio_frame = ttk.Frame(security_radios_frame)
         radio_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         for security in ["WPA2", "WPA", "WEP", "nopass"]:
@@ -396,18 +447,46 @@ class MainWindow:
             )
             radio.pack(side=tk.LEFT, padx=10)
             self.security_radios.append(radio)
-
-        # Frame para selección de propiedad
+            
+        # Frame para selección de propiedad con toggle switch
         property_frame = ttk.Frame(options_container)
         property_frame.pack(fill=tk.X, expand=True)
         
-        ttk.Label(property_frame, text="Propiedad por Defecto:").pack(side=tk.LEFT, padx=5)
+        # Frame para el switch de propiedad
+        property_switch_frame = ttk.Frame(property_frame)
+        property_switch_frame.pack(fill=tk.X, expand=True, side=tk.TOP, pady=(0,5))
+        
+        # Switch para usar propiedad del Excel
+        ttk.Label(property_switch_frame, text="Obtener la Propiedad desde el Excel:").pack(side=tk.LEFT, padx=5)
+        property_switch = ttk.Checkbutton(
+            property_switch_frame,
+            variable=self.use_excel_property,
+            text="",
+            style="Switch.TCheckbutton",
+            command=self._update_property_switch_state
+        )
+        property_switch.pack(side=tk.LEFT, padx=5)
+        
+        # Etiqueta que cambia según el estado del switch
+        self.property_switch_label = ttk.Label(
+            property_switch_frame,
+            text="ON - Si hay valores de propiedad en el Excel, se usarán",
+            font=("", 8, "italic"),
+            foreground="green"
+        )
+        self.property_switch_label.pack(side=tk.LEFT, padx=5)
+        
+        # Frame para los radio buttons de propiedad
+        property_radios_frame = ttk.Frame(property_frame)
+        property_radios_frame.pack(fill=tk.X, expand=True, side=tk.TOP)
+        
+        ttk.Label(property_radios_frame, text="Propiedad por Defecto:").pack(side=tk.LEFT, padx=5)
         
         # Variable y radio buttons para propiedad
-        self.property_var = tk.StringVar(value="Sin Logo")
+        self.property_var = tk.StringVar(value="VG")
         self.property_radios = []
         
-        property_radio_frame = ttk.Frame(property_frame)
+        property_radio_frame = ttk.Frame(property_radios_frame)
         property_radio_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         for property_type in ["VLE", "VG", "Sin Logo"]:
@@ -420,26 +499,17 @@ class MainWindow:
             radio.pack(side=tk.LEFT, padx=10)
             self.property_radios.append(radio)
             
-        # Etiquetas informativas de prioridad
-        self.security_priority_label = ttk.Label(
+        # Mensaje informativo para configuración manual
+        self.manual_config_label = ttk.Label(
             self.options_frame,
-            text="La prioridad en el método de seguridad la tiene el fichero cargado.",
+            text="Puede configurar las columnas manualmente para detectar los valores de seguridad y propiedad",
             foreground="gray",
             font=("", 8, "italic")
         )
-        self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
+        self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
         
-        self.property_priority_label = ttk.Label(
-            self.options_frame,
-            text="La prioridad en la propiedad la tiene el fichero cargado.",
-            foreground="gray",
-            font=("", 8, "italic")
-        )
-        self.property_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-        
-        # Inicialmente ocultar las etiquetas
-        self.security_priority_label.pack_forget()
-        self.property_priority_label.pack_forget()
+        # Inicialmente ocultar el mensaje informativo
+        self.manual_config_label.pack_forget()
         
         # Botón de selección manual de columnas
         self.manual_cols_btn = ttk.Button(
@@ -535,21 +605,20 @@ class MainWindow:
         # Habilitar controles de búsqueda de habitación
         self._enable_room_search()
         
+        # Mostrar etiqueta informativa si no se detectan columnas de seguridad o propiedad
+        if self.excel_manager.columns:
+            # Verificar si faltan columnas de seguridad o propiedad
+            if (self.excel_manager.columns.encryption is None or 
+                self.excel_manager.columns.property_type is None):
+                # Mostrar mensaje informativo para configurar columnas
+                self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
+            else:
+                # Si se encontraron ambas columnas, ocultar el mensaje
+                self.manual_config_label.pack_forget()
+        
         # Resetear a WPA2 por defecto al cargar una nueva hoja
         self.security_var.set("WPA2")
         
-        # Mostrar etiqueta de prioridad si hay columna de seguridad
-        if self.excel_manager.columns.encryption is not None:
-            self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-        else:
-            self.security_priority_label.pack_forget()
-            
-        # Mostrar etiqueta de prioridad si hay columna de propiedad
-        if self.excel_manager.columns.property_type is not None:
-            self.property_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-        else:
-            self.property_priority_label.pack_forget()
-            
     def _update_security_radio_state(self):
         """Actualizar seguridad por defecto al cargar una hoja."""
         # Reiniciar a WPA2 por defecto al cargar una nueva hoja
@@ -607,25 +676,28 @@ class MainWindow:
             
     def _show_column_dialog(self):
         """Mostrar diálogo para selección manual de columnas."""
-        dialog = ColumnSelectionDialog(self.root)
+        # Preparar las columnas iniciales detectadas si existen
+        initial_columns = None
+        if self.excel_manager and self.excel_manager.columns:
+            initial_columns = {
+                'room': self.excel_manager.columns.room,
+                'ssid': self.excel_manager.columns.ssid
+            }
+            # Agregar columnas opcionales si existen
+            if self.excel_manager.columns.password is not None:
+                initial_columns['password'] = self.excel_manager.columns.password
+            if self.excel_manager.columns.encryption is not None:
+                initial_columns['encryption'] = self.excel_manager.columns.encryption
+            if self.excel_manager.columns.property_type is not None:
+                initial_columns['property_type'] = self.excel_manager.columns.property_type
+            
+        dialog = ColumnSelectionDialog(self.root, initial_columns)
         self.root.wait_window(dialog)
         
         if dialog.column_indices:
             if self.excel_manager.set_columns_manually(dialog.column_indices):
                 messagebox.showinfo("Éxito", "Columnas configuradas exitosamente")
                 self._enable_room_search()
-                
-                # Mostrar etiqueta de prioridad si se configuró columna de encryption
-                if 'encryption' in dialog.column_indices:
-                    self.security_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-                else:
-                    self.security_priority_label.pack_forget()
-                    
-                # Mostrar etiqueta de prioridad si se configuró columna de propiedad
-                if 'property_type' in dialog.column_indices:
-                    self.property_priority_label.pack(fill=tk.X, padx=5, pady=(0, 5))
-                else:
-                    self.property_priority_label.pack_forget()
             else:
                 messagebox.showerror("Error", "Error al configurar columnas")
                 
@@ -718,12 +790,12 @@ class MainWindow:
                 messagebox.showerror("Error", f"Habitación {room} no encontrada o datos faltantes")
                 return
 
-            # Solo usar el valor de los radio buttons si no hay valor de encriptación en el Excel
-            if credentials.encryption is None:
+            # Determinar si usar el valor de encriptación del Excel o de la interfaz
+            if not self.use_excel_security.get() or credentials.encryption is None:
                 credentials.encryption = self.security_var.get()
 
-            # Solo usar el valor de los radio buttons si no hay valor de propiedad en el Excel
-            if credentials.property_type is None:
+            # Determinar si usar el valor de propiedad del Excel o de la interfaz
+            if not self.use_excel_property.get() or credentials.property_type is None:
                 credentials.property_type = self.property_var.get()
 
             self._generate_and_preview_qr(credentials)
@@ -747,12 +819,12 @@ class MainWindow:
             selected_security = self.security_var.get()
             selected_property = self.property_var.get()
             for cred in credentials_list:
-                # Solo usar el valor seleccionado si no hay valor de encriptación en el Excel
-                if cred.encryption is None:
+                # Determinar si usar el valor de encriptación del Excel o de la interfaz
+                if not self.use_excel_security.get() or cred.encryption is None:
                     cred.encryption = selected_security
                     
-                # Solo usar el valor seleccionado si no hay valor de propiedad en el Excel
-                if cred.property_type is None:
+                # Determinar si usar el valor de propiedad del Excel o de la interfaz
+                if not self.use_excel_property.get() or cred.property_type is None:
                     cred.property_type = selected_property
                     
                 self._generate_and_preview_qr(cred, show_preview=False)
@@ -842,6 +914,52 @@ class MainWindow:
         else:
             messagebox.showinfo("Info", "No se ha generado ningún código QR aún")
             
+    def _update_security_switch_state(self):
+        """Actualizar el estado de la etiqueta del switch de seguridad."""
+        if self.use_excel_security.get():
+            self.security_switch_label.config(
+                text="ON - Si hay valores de seguridad en Excel, se usarán.",
+                foreground="green"
+            )
+            # Verificar si hay columna de encriptación configurada
+            if self.excel_manager and self.excel_manager.columns:
+                if self.excel_manager.columns.encryption is None:
+                    # Si la columna de seguridad no está configurada, pero el toggle está ON
+                    # Mostrar mensaje informativo para configurar columnas
+                    self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
+        else:
+            self.security_switch_label.config(
+                text="OFF - Se usará el valor de seguridad seleccionado",
+                foreground="red"
+            )
+            
+            # Verificar si podemos ocultar el mensaje de configuración
+            if not self.use_excel_property.get():
+                self.manual_config_label.pack_forget()
+
+    def _update_property_switch_state(self):
+        """Actualizar el estado de la etiqueta del switch de propiedad."""
+        if self.use_excel_property.get():
+            self.property_switch_label.config(
+                text="ON - Si hay valores de la propiedad en Excel, se usarán.",
+                foreground="green"
+            )
+            # Verificar si hay columna de propiedad configurada
+            if self.excel_manager and self.excel_manager.columns:
+                if self.excel_manager.columns.property_type is None:
+                    # Si la columna de propiedad no está configurada, pero el toggle está ON
+                    # Mostrar mensaje informativo para configurar columnas
+                    self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
+        else:
+            self.property_switch_label.config(
+                text="OFF - Se usará el valor de propiedad seleccionado",
+                foreground="red"
+            )
+            
+            # Verificar si podemos ocultar el mensaje de configuración
+            if not self.use_excel_security.get():
+                self.manual_config_label.pack_forget()
+                
     def run(self):
         """Iniciar el bucle principal de la aplicación."""
         self.root.mainloop()
