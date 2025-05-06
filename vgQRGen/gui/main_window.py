@@ -10,53 +10,16 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
 from typing import Optional, Dict
+import subprocess
+import sys
 
 from ..core.excel_manager import ExcelManager
 from ..core.qr_manager import QRManager, WiFiCredentials
 from ..utils.logging_utils import LogManager
 from ..utils.config_manager import ConfigManager
+from ..utils.excel_utils import excel_column_to_index, index_to_excel_column
 
 logger = LogManager.get_logger(__name__)
-
-def excel_column_to_index(column_letter: str) -> int:
-    """
-    Convertir letra de columna de Excel a índice de columna basado en cero.
-    
-    Args:
-        column_letter (str): Letra de columna (por ejemplo, 'A', 'B', 'AA', etc.)
-        
-    Returns:
-        int: Índice de columna basado en cero
-        
-    Ejemplos:
-        'A' -> 0
-        'B' -> 1
-        'Z' -> 25
-        'AA' -> 26
-        'AB' -> 27
-    """
-    column_letter = column_letter.upper().strip()
-    result = 0
-    for i, char in enumerate(reversed(column_letter)):
-        result += (ord(char) - ord('A') + 1) * (26 ** i)
-    return result - 1
-
-def index_to_excel_column(index: int) -> str:
-    """
-    Convertir índice de columna basado en cero a letra de columna de Excel.
-    
-    Args:
-        index (int): Índice de columna basado en cero
-        
-    Returns:
-        str: Letra de columna (por ejemplo, 'A', 'B', 'AA', etc.)
-    """
-    index += 1
-    result = ""
-    while index > 0:
-        index, remainder = divmod(index - 1, 26)
-        result = chr(ord('A') + remainder) + result
-    return result
 
 class SheetSelectionDialog(tk.Toplevel):
     """Diálogo para seleccionar hoja de Excel."""
@@ -214,9 +177,13 @@ class MainWindow:
     
     def __init__(self):
         """Inicializar la ventana principal y sus componentes."""
+        # Obtener logger para esta clase
+        self.logger = LogManager.get_logger(__name__)
+        self.logger.info("Inicializando ventana principal")
+        
         self.root = tk.Tk()
-        self.root.title("Generador de QR de Wifi VillaGroup")
-        self.root.geometry("935x500")  # Ventana inicial más grande (incrementada en 35px)
+        self.root.title("Generador de QR Wifi VillaGroup")
+        self.root.geometry("950x500")  # Ventana inicial más grande (incrementada en 35px)
         
         # Establecer tamaño mínimo de la ventana
         # El ancho mínimo considera: columna izquierda (300px) + columna derecha con QR (300px) + padding
@@ -240,6 +207,8 @@ class MainWindow:
         
         # Cargar último archivo si existe
         self._load_last_file()
+        
+        self.logger.info("Ventana principal inicializada correctamente")
         
     def _setup_styles(self):
         """Configurar estilos personalizados para la UI."""
@@ -284,6 +253,9 @@ class MainWindow:
             
         self._enable_sheet_selection()
         
+        # Actualizar lista de archivos recientes inmediatamente
+        self._update_recent_files_list()
+
     def _setup_ui(self):
         """Configurar todos los componentes de la UI."""
         # Crear marco principal para las dos columnas
@@ -419,7 +391,7 @@ class MainWindow:
         # Etiqueta que cambia según el estado del switch
         self.security_switch_label = ttk.Label(
             security_switch_frame,
-            text="ON - Si hay valores de seguridad en Excel, se usarán.",
+            text="ON - Los valores de seguridad en Excel, tienen preferencia.",
             font=("", 8, "italic"),
             foreground="green"
         )
@@ -470,7 +442,7 @@ class MainWindow:
         # Etiqueta que cambia según el estado del switch
         self.property_switch_label = ttk.Label(
             property_switch_frame,
-            text="ON - Si hay valores de propiedad en el Excel, se usarán",
+            text="ON - Los valores de propiedad en Excel, tienen preferencia.",
             font=("", 8, "italic"),
             foreground="green"
         )
@@ -543,32 +515,6 @@ class MainWindow:
                                          command=self._generate_all_qr, state="disabled")
         self.generate_all_btn.pack(side=tk.LEFT, padx=5)
         
-    def _browse_excel(self):
-        """Abrir diálogo de archivo para seleccionar archivo Excel."""
-        # Crear menú de archivos recientes
-        recent_menu = tk.Menu(self.root, tearoff=0)
-        recent_files = self.config_manager.get_recent_files()
-        
-        for recent in recent_files:
-            file_name = os.path.basename(recent["path"])
-            recent_menu.add_command(
-                label=file_name,
-                command=lambda p=recent["path"]: self._load_excel_file(p)
-            )
-        
-        if recent_files:
-            recent_menu.add_separator()
-        recent_menu.add_command(label="Examinar...", command=self._browse_new_excel)
-        
-        # Mostrar menú en la posición del botón
-        try:
-            recent_menu.tk_popup(
-                self.root.winfo_pointerx(),
-                self.root.winfo_pointery()
-            )
-        finally:
-            recent_menu.grab_release()
-            
     def _browse_new_excel(self):
         """Abrir diálogo para seleccionar nuevo archivo Excel."""
         filename = filedialog.askopenfilename(
@@ -595,39 +541,367 @@ class MainWindow:
         success, error_msg = self.excel_manager.set_active_sheet(sheet_name)
         if not success:
             messagebox.showerror("Error", error_msg)
-            if "columnas" in error_msg.lower():
-                self._enable_manual_column_selection()
+            return
+        
+        # Si llegamos aquí, la hoja se cargó correctamente y las columnas se detectaron
+        # Guardar la hoja en la configuración
+        self.config_manager.add_recent_file(self.file_path.get(), sheet_name)
+        
+        # Habilitar la búsqueda de habitación y mostrar mensaje informativo
+        self._enable_room_search()
+        self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
+    
+    def _update_security_switch_state(self):
+        """Actualizar estado de los controles según la opción de obtener seguridad desde Excel."""
+        if self.use_excel_security.get():
+            # Está activado - Cambiar etiqueta a ON
+            self.security_switch_label.config(
+                text="ON - Los valores de seguridad en Excel, tienen preferencia.",
+                foreground="green"
+            )
+            # Ya no desactivamos los radio buttons, permanecen activos
+            for radio in self.security_radios:
+                radio['state'] = 'normal'
+        else:
+            # Está desactivado - Cambiar etiqueta a OFF
+            self.security_switch_label.config(
+                text="OFF - Se usará el tipo seleccionado por defecto.",
+                foreground="gray"
+            )
+            # Activar radio buttons de seguridad
+            for radio in self.security_radios:
+                radio['state'] = 'normal'
+    
+    def _update_property_switch_state(self):
+        """Actualizar estado de los controles según la opción de obtener propiedad desde Excel."""
+        if self.use_excel_property.get():
+            # Está activado - Cambiar etiqueta a ON
+            self.property_switch_label.config(
+                text="ON - Los valores de propiedad en Excel, tienen preferencia.",
+                foreground="green"
+            )
+            # Ya no desactivamos los radio buttons, permanecen activos
+            for radio in self.property_radios:
+                radio['state'] = 'normal'
+        else:
+            # Está desactivado - Cambiar etiqueta a OFF
+            self.property_switch_label.config(
+                text="OFF - Se usará la propiedad seleccionada por defecto.",
+                foreground="gray"
+            )
+            # Activar radio buttons de propiedad
+            for radio in self.property_radios:
+                radio['state'] = 'normal'
+    
+    def _setup_manual_tab(self, parent: ttk.Frame):
+        """Configurar la pestaña de entrada manual de credenciales WiFi."""
+        # Marco para entrada de credenciales
+        cred_frame = ttk.LabelFrame(parent, text="Credenciales WiFi", padding=5)
+        cred_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Contenedor para entradas
+        form_frame = ttk.Frame(cred_frame)
+        form_frame.pack(fill=tk.X, expand=True, padx=5, pady=5)
+        form_frame.columnconfigure(1, weight=1)  # La columna de entradas se expande
+        
+        # SSID
+        ttk.Label(form_frame, text="SSID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.manual_ssid = tk.StringVar()
+        ttk.Entry(form_frame, textvariable=self.manual_ssid).grid(
+            row=0, column=1, sticky="ew", padx=5, pady=2
+        )
+        
+        # Contraseña
+        ttk.Label(form_frame, text="Contraseña:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.manual_password = tk.StringVar()
+        ttk.Entry(form_frame, textvariable=self.manual_password).grid(
+            row=1, column=1, sticky="ew", padx=5, pady=2
+        )
+        
+        # Tipo de seguridad
+        security_frame = ttk.LabelFrame(parent, text="Tipo de Seguridad", padding=5)
+        security_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Variable y radio buttons para método de seguridad
+        self.manual_security_var = tk.StringVar(value="WPA2")
+        security_radio_frame = ttk.Frame(security_frame)
+        security_radio_frame.pack(fill=tk.X, expand=True, padx=5, pady=5)
+        
+        for security in ["WPA2", "WPA", "WEP", "nopass"]:
+            ttk.Radiobutton(
+                security_radio_frame,
+                text=security,
+                variable=self.manual_security_var,
+                value=security
+            ).pack(side=tk.LEFT, padx=10)
+        
+        # Logo/Propiedad
+        property_frame = ttk.LabelFrame(parent, text="Propiedad", padding=5)
+        property_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Variable y radio buttons para propiedad
+        self.manual_property_var = tk.StringVar(value="VG")
+        property_radio_frame = ttk.Frame(property_frame)
+        property_radio_frame.pack(fill=tk.X, expand=True, padx=5, pady=5)
+        
+        for property_type in ["VLE", "VG", "Sin Logo"]:
+            ttk.Radiobutton(
+                property_radio_frame,
+                text=property_type,
+                variable=self.manual_property_var,
+                value=property_type
+            ).pack(side=tk.LEFT, padx=10)
+            
+        # Botón de generación
+        button_frame = ttk.Frame(parent)
+        button_frame.pack(fill=tk.X, padx=5, pady=10)
+        
+        ttk.Button(
+            button_frame, 
+            text="Generar QR", 
+            command=self._generate_manual_qr
+        ).pack(side=tk.RIGHT, padx=5)
+        
+    def _generate_manual_qr(self):
+        """Generar QR desde datos ingresados manualmente."""
+        # Validar SSID (requerido)
+        ssid = self.manual_ssid.get().strip()
+        if not ssid:
+            messagebox.showerror("Error", "El SSID es obligatorio")
             return
             
-        # Guardar la última hoja seleccionada
-        self.config_manager.add_recent_file(self.excel_manager.file_path, sheet_name)
+        # Obtener otros valores
+        password = self.manual_password.get().strip() or None
+        security = self.manual_security_var.get()
+        property_type = self.manual_property_var.get()
         
-        # Habilitar controles de búsqueda de habitación
-        self._enable_room_search()
+        if property_type == "Sin Logo":
+            property_type = None
+            
+        # Crear credenciales WiFi
+        credentials = WiFiCredentials(
+            ssid=ssid,
+            password=password,
+            encryption=security if security != "nopass" else None,
+            property_type=property_type
+        )
         
-        # Mostrar etiqueta informativa si no se detectan columnas de seguridad o propiedad
+        # Generar QR
+        self._generate_and_show_qr(credentials, "manual")
+        
+    def _generate_and_show_qr(self, credentials: WiFiCredentials, filename_prefix: str = "qr"):
+        """
+        Generar un código QR y mostrarlo en la interfaz.
+        
+        Args:
+            credentials (WiFiCredentials): Credenciales de WiFi para el QR
+            filename_prefix (str): Prefijo para el nombre del archivo guardado
+        """
+        try:
+            # Generar QR básico
+            qr_buffer = self.qr_manager.generate_wifi_qr(credentials)
+            
+            # Agregar logo si hay propiedad
+            if credentials.property_type:
+                qr_buffer = self.qr_manager.add_logo(qr_buffer, credentials.property_type)
+                
+            # Agregar texto de credenciales
+            qr_buffer = self.qr_manager.add_text(qr_buffer, credentials.ssid, credentials.password)
+            
+            # Abrir la imagen para mostrarla (sin modificar el buffer original)
+            qr_img = Image.open(qr_buffer)
+            
+            # Obtener dimensiones del área de visualización
+            preview_width = 300  # Ancho fijo del área de previsualización
+            preview_height = 300  # Alto fijo del área de previsualización
+            
+            # Redimensionar manteniendo la proporción solo para la visualización
+            img_width, img_height = qr_img.size
+            ratio = min(preview_width/img_width, preview_height/img_height)
+            new_size = (int(img_width * ratio), int(img_height * ratio))
+            
+            # Crear una imagen redimensionada solo para la visualización
+            display_img = qr_img.resize(new_size, Image.LANCZOS)
+            
+            # Crear un fondo blanco del tamaño del área de visualización
+            background = Image.new('RGB', (preview_width, preview_height), 'white')
+            
+            # Calcular posición para centrar la imagen redimensionada
+            offset = ((preview_width - new_size[0]) // 2, (preview_height - new_size[1]) // 2)
+            
+            # Pegar la imagen redimensionada en el fondo blanco
+            background.paste(display_img, offset)
+            
+            # Mostrar en la interfaz
+            photo = ImageTk.PhotoImage(background)
+            self.preview_label.configure(image=photo)
+            self.preview_label.image = photo
+            
+            # Actualizar etiqueta de configuración
+            config_text = f"SSID: {credentials.ssid}\n"
+            if credentials.password:
+                config_text += f"Contraseña: {credentials.password}\n"
+            config_text += f"Seguridad: {credentials.encryption or 'Sin encriptación'}\n"
+            if credentials.property_type:
+                config_text += f"Propiedad: {credentials.property_type}"
+            
+            self.config_label.configure(text=config_text)
+            
+            # Guardar QR en archivo (usando el buffer original sin redimensionar)
+            sanitized_prefix = ''.join(c for c in filename_prefix if c.isalnum() or c in '_- ')
+            filename = f"qr_{sanitized_prefix}.png"
+            self.last_qr_path = self.qr_manager.save_qr(qr_buffer, filename)
+            
+            return True
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error generando código QR: {str(e)}")
+            logger.error(f"Error en _generate_and_show_qr: {str(e)}")
+            return False
+            
+    def _generate_room_qr(self):
+        """Generar código QR para la habitación especificada."""
+        room = self.room_number.get().strip()
+        if not room:
+            messagebox.showerror("Error", "Por favor ingrese un número de habitación")
+            return
+            
+        if not self.excel_manager or not self.excel_manager.sheet:
+            messagebox.showerror("Error", "No hay hoja de Excel cargada")
+            return
+            
+        credentials = self.excel_manager.get_room_data(room)
+        if not credentials:
+            messagebox.showerror("Error", f"No se encontró la habitación {room}")
+            return
+            
+        # Reemplazar valores según configuración
+        if not self.use_excel_security.get() or not credentials.encryption:
+            credentials.encryption = self.security_var.get()
+            
+        if not self.use_excel_property.get() or not credentials.property_type:
+            property_val = self.property_var.get()
+            credentials.property_type = None if property_val == "Sin Logo" else property_val
+            
+        # Generar QR
+        self._generate_and_show_qr(credentials, f"{room}")
+            
+    def _generate_all_qr(self):
+        """Generar códigos QR para todas las habitaciones."""
+        if not self.excel_manager or not self.excel_manager.sheet:
+            messagebox.showerror("Error", "No hay hoja de Excel cargada")
+            return
+            
+        all_rooms = self.excel_manager.get_all_rooms()
+        if not all_rooms:
+            messagebox.showerror("Error", "No se encontraron habitaciones en la hoja seleccionada")
+            return
+            
+        # Pedir confirmación
+        confirm = messagebox.askyesno(
+            "Confirmar", 
+            f"Se generarán {len(all_rooms)} códigos QR. ¿Desea continuar?"
+        )
+        if not confirm:
+            return
+            
+        count = 0
+        for room_data in all_rooms:
+            # Reemplazar valores según configuración
+            if not self.use_excel_security.get() or not room_data.encryption:
+                room_data.encryption = self.security_var.get()
+                
+            if not self.use_excel_property.get() or not room_data.property_type:
+                property_val = self.property_var.get()
+                room_data.property_type = None if property_val == "Sin Logo" else property_val
+                
+            # Generar QR (usando nombre de habitación como prefijo de archivo)
+            room_name = room_data.ssid.replace(" ", "_")
+            if self._generate_and_show_qr(room_data, room_name):
+                count += 1
+                
+        if count > 0:
+            messagebox.showinfo("Éxito", f"Se generaron {count} códigos QR")
+        else:
+            messagebox.showerror("Error", "No se pudo generar ningún código QR")
+            
+    def _open_codes_folder(self):
+        """Abrir carpeta donde se guardan los códigos QR generados."""
+        folder_path = os.path.abspath(self.qr_manager.output_dir)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path, exist_ok=True)
+        
+        # Usar el comando correcto según la plataforma
+        try:
+            if os.name == 'nt':  # Windows
+                os.startfile(folder_path)
+            elif os.name == 'posix':  # macOS, Linux
+                if sys.platform == 'darwin':  # macOS
+                    subprocess.run(['open', folder_path])
+                else:  # Linux
+                    subprocess.run(['xdg-open', folder_path])
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir la carpeta: {str(e)}")
+            
+    def _open_last_qr(self):
+        """Abrir el último código QR generado."""
+        if hasattr(self, 'last_qr_path') and os.path.exists(self.last_qr_path):
+            try:
+                if os.name == 'nt':  # Windows
+                    os.startfile(self.last_qr_path)
+                elif os.name == 'posix':  # macOS, Linux
+                    if sys.platform == 'darwin':  # macOS
+                        subprocess.run(['open', self.last_qr_path])
+                    else:  # Linux
+                        subprocess.run(['xdg-open', self.last_qr_path])
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo abrir el archivo: {str(e)}")
+        else:
+            messagebox.showinfo("Información", "No hay código QR generado recientemente")
+            
+    def _update_recent_files_list(self):
+        """Actualizar lista de archivos recientes en el combobox."""
+        recent_files = self.config_manager.get_recent_files()
+        files = [f["path"] for f in recent_files]
+        self.file_combo['values'] = files
+        
+    def _on_file_selected(self, event):
+        """Manejar selección de archivo en el combobox."""
+        filename = self.file_path.get()
+        if filename:
+            self._load_excel_file(filename)
+            
+    def _show_column_dialog(self):
+        """Mostrar diálogo para selección manual de columnas."""
+        if not self.excel_manager:
+            return
+            
+        # Usar valores actuales de columnas como iniciales, si existen
+        initial_columns = None
         if self.excel_manager.columns:
-            # Verificar si faltan columnas de seguridad o propiedad
-            if (self.excel_manager.columns.encryption is None or 
-                self.excel_manager.columns.property_type is None):
-                # Mostrar mensaje informativo para configurar columnas
-                self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
+            initial_columns = {
+                'room': self.excel_manager.columns.room,
+                'ssid': self.excel_manager.columns.ssid
+            }
+            if self.excel_manager.columns.password is not None:
+                initial_columns['password'] = self.excel_manager.columns.password
+            if self.excel_manager.columns.encryption is not None:
+                initial_columns['encryption'] = self.excel_manager.columns.encryption
+            if self.excel_manager.columns.property_type is not None:
+                initial_columns['property_type'] = self.excel_manager.columns.property_type
+        
+        # Mostrar diálogo
+        dialog = ColumnSelectionDialog(self.root, initial_columns)
+        self.root.wait_window(dialog)
+        
+        # Si se seleccionaron columnas, aplicarlas
+        if dialog.column_indices:
+            if self.excel_manager.set_columns_manually(dialog.column_indices):
+                self._enable_room_search()
+                messagebox.showinfo("Éxito", "Columnas configuradas correctamente")
             else:
-                # Si se encontraron ambas columnas, ocultar el mensaje
-                self.manual_config_label.pack_forget()
-        
-        # Resetear a WPA2 por defecto al cargar una nueva hoja
-        self.security_var.set("WPA2")
-        
-    def _update_security_radio_state(self):
-        """Actualizar seguridad por defecto al cargar una hoja."""
-        # Reiniciar a WPA2 por defecto al cargar una nueva hoja
-        self.security_var.set("WPA2")
-
-    def _enable_manual_column_selection(self):
-        """Habilitar selección manual de columnas."""
-        self.manual_cols_btn['state'] = 'normal'
-        
+                messagebox.showerror("Error", "No se pudieron configurar las columnas")
+                
     def _enable_room_search(self):
         """Habilitar controles de búsqueda de habitación."""
         self.room_entry['state'] = 'normal'
@@ -636,330 +910,18 @@ class MainWindow:
         self.manual_cols_btn['state'] = 'normal'
         
     def _reset_excel_ui(self):
-        """Restablecer controles de UI de Excel al estado inicial."""
-        self.file_path.set("")
-        self.file_combo['values'] = []
-        self.sheet_combo.set("")
+        """Resetear elementos de UI relacionados con Excel a su estado inicial."""
+        self.excel_manager = None
         self.sheet_combo['values'] = []
+        self.sheet_combo.set("")
         self.sheet_combo['state'] = 'disabled'
         self.load_sheet_btn['state'] = 'disabled'
-        self.manual_cols_btn['state'] = 'disabled'
         self.room_entry['state'] = 'disabled'
+        self.room_entry.delete(0, tk.END)
         self.generate_btn['state'] = 'disabled'
         self.generate_all_btn['state'] = 'disabled'
-        self.room_number.set("")
-        # Actualizar lista de archivos recientes
-        self._update_recent_files_list()
+        self.manual_cols_btn['state'] = 'disabled'
         
-    def _update_recent_files_list(self):
-        """Actualizar lista de archivos recientes en el Combobox."""
-        recent_files = self.config_manager.get_recent_files()
-        
-        if recent_files:
-            # Crear lista de nombres de archivo para mostrar
-            display_values = [os.path.basename(f["path"]) for f in recent_files]
-            
-            # Configurar el Combobox para mostrar los nombres de archivo
-            self.file_combo['values'] = display_values
-            
-            # Almacenar las rutas completas para su uso posterior
-            self._file_paths = {os.path.basename(f["path"]): f["path"] for f in recent_files}
-            
-    def _on_file_selected(self, event):
-        """Manejar la selección de un archivo desde el Combobox."""
-        selected_name = self.file_combo.get()
-        if selected_name and hasattr(self, '_file_paths'):
-            full_path = self._file_paths.get(selected_name)
-            if full_path:
-                self.file_path.set(full_path)
-                self._load_excel_file(full_path)
-            
-    def _show_column_dialog(self):
-        """Mostrar diálogo para selección manual de columnas."""
-        # Preparar las columnas iniciales detectadas si existen
-        initial_columns = None
-        if self.excel_manager and self.excel_manager.columns:
-            initial_columns = {
-                'room': self.excel_manager.columns.room,
-                'ssid': self.excel_manager.columns.ssid
-            }
-            # Agregar columnas opcionales si existen
-            if self.excel_manager.columns.password is not None:
-                initial_columns['password'] = self.excel_manager.columns.password
-            if self.excel_manager.columns.encryption is not None:
-                initial_columns['encryption'] = self.excel_manager.columns.encryption
-            if self.excel_manager.columns.property_type is not None:
-                initial_columns['property_type'] = self.excel_manager.columns.property_type
-            
-        dialog = ColumnSelectionDialog(self.root, initial_columns)
-        self.root.wait_window(dialog)
-        
-        if dialog.column_indices:
-            if self.excel_manager.set_columns_manually(dialog.column_indices):
-                messagebox.showinfo("Éxito", "Columnas configuradas exitosamente")
-                self._enable_room_search()
-            else:
-                messagebox.showerror("Error", "Error al configurar columnas")
-                
-    def _setup_manual_tab(self, parent: ttk.Frame):
-        """Configurar la pestaña de entrada manual."""
-        # Frame principal con padding consistente
-        input_frame = ttk.LabelFrame(parent, text="Detalles de Red", padding=10)
-        input_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        # Frame para campos de entrada
-        fields_frame = ttk.Frame(input_frame)
-        fields_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
-        fields_frame.grid_columnconfigure(1, weight=1)  # La columna del campo se expandirá
-        
-        # SSID con alineación izquierda y ancho controlado
-        ttk.Label(fields_frame, text="SSID:").grid(row=0, column=0, sticky=tk.W, padx=(0, 10), pady=5)
-        self.manual_ssid = tk.StringVar()
-        ttk.Entry(fields_frame, textvariable=self.manual_ssid, width=30).grid(row=0, column=1, sticky="w", pady=5)
-        
-        # Contraseña con alineación izquierda y ancho controlado
-        ttk.Label(fields_frame, text="Contraseña:").grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=5)
-        self.manual_password = tk.StringVar()
-        ttk.Entry(fields_frame, textvariable=self.manual_password, width=30).grid(row=1, column=1, sticky="w", pady=5)
-        
-        # Frame para las opciones de seguridad con padding superior
-        security_frame = ttk.Frame(input_frame)
-        security_frame.pack(fill=tk.X, expand=True, pady=(0, 10))
-        
-        ttk.Label(security_frame, text="Método de Seguridad:").pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Variable y radio buttons para método de seguridad
-        self.manual_encryption = tk.StringVar(value="WPA2")
-        
-        radio_frame = ttk.Frame(security_frame)
-        radio_frame.pack(side=tk.LEFT, fill=tk.X)
-        
-        for security in ["WPA2", "WPA", "WEP", "nopass"]:
-            ttk.Radiobutton(
-                radio_frame,
-                text=security,
-                variable=self.manual_encryption,
-                value=security
-            ).pack(side=tk.LEFT, padx=(0, 15))  # Espaciado uniforme entre radio buttons
-
-        # Frame para las opciones de propiedad
-        property_frame = ttk.Frame(input_frame)
-        property_frame.pack(fill=tk.X, expand=True, pady=(0, 15))
-        
-        ttk.Label(property_frame, text="Propiedad:").pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Variable y radio buttons para propiedad
-        self.manual_property = tk.StringVar(value="Sin Logo")
-        
-        property_radio_frame = ttk.Frame(property_frame)
-        property_radio_frame.pack(side=tk.LEFT, fill=tk.X)
-        
-        for property_type in ["VLE", "VG", "Sin Logo"]:
-            ttk.Radiobutton(
-                property_radio_frame,
-                text=property_type,
-                variable=self.manual_property,
-                value=property_type
-            ).pack(side=tk.LEFT, padx=(0, 15))  # Espaciado uniforme entre radio buttons
-        
-        # Botón de generar centrado
-        button_frame = ttk.Frame(input_frame)
-        button_frame.pack(fill=tk.X, expand=True)
-        button_frame.grid_columnconfigure(0, weight=1)  # Para centrar el botón
-        
-        ttk.Button(
-            button_frame,
-            text="Generar QR",
-            command=self._generate_manual_qr
-        ).grid(row=0, column=0)
-                  
-    def _generate_room_qr(self):
-        """Generar código QR para una habitación específica desde Excel."""
-        if not self.excel_manager:
-            messagebox.showerror("Error", "Por favor seleccione un archivo Excel primero")
-            return
-            
-        room = self.room_number.get().strip()
-        if not room:
-            messagebox.showerror("Error", "Por favor ingrese un número de habitación")
-            return
-            
-        try:
-            credentials = self.excel_manager.get_room_data(room)
-            if not credentials:
-                messagebox.showerror("Error", f"Habitación {room} no encontrada o datos faltantes")
-                return
-
-            # Determinar si usar el valor de encriptación del Excel o de la interfaz
-            if not self.use_excel_security.get() or credentials.encryption is None:
-                credentials.encryption = self.security_var.get()
-
-            # Determinar si usar el valor de propiedad del Excel o de la interfaz
-            if not self.use_excel_property.get() or credentials.property_type is None:
-                credentials.property_type = self.property_var.get()
-
-            self._generate_and_preview_qr(credentials)
-        except Exception as e:
-            logger.error(f"Error generando QR para la habitación {room}: {str(e)}")
-            messagebox.showerror("Error", str(e))
-            
-    def _generate_all_qr(self):
-        """Generar códigos QR para todas las habitaciones en Excel."""
-        if not self.excel_manager:
-            messagebox.showerror("Error", "Por favor seleccione un archivo Excel primero")
-            return
-            
-        try:
-            credentials_list = self.excel_manager.get_all_rooms()
-            if not credentials_list:
-                messagebox.showinfo("Info", "No se encontraron habitaciones válidas en el archivo Excel")
-                return
-                
-            # Procesar cada habitación individualmente
-            selected_security = self.security_var.get()
-            selected_property = self.property_var.get()
-            for cred in credentials_list:
-                # Determinar si usar el valor de encriptación del Excel o de la interfaz
-                if not self.use_excel_security.get() or cred.encryption is None:
-                    cred.encryption = selected_security
-                    
-                # Determinar si usar el valor de propiedad del Excel o de la interfaz
-                if not self.use_excel_property.get() or cred.property_type is None:
-                    cred.property_type = selected_property
-                    
-                self._generate_and_preview_qr(cred, show_preview=False)
-                
-            messagebox.showinfo("Éxito", 
-                              f"Generados {len(credentials_list)} códigos QR en la carpeta de códigos")
-        except Exception as e:
-            logger.error(f"Error generando todos los QRs: {str(e)}")
-            messagebox.showerror("Error", str(e))
-            
-    def _generate_manual_qr(self):
-        """Generar código QR desde entrada manual."""
-        ssid = self.manual_ssid.get().strip()
-        if not ssid:
-            messagebox.showerror("Error", "El SSID es requerido")
-            return
-            
-        credentials = WiFiCredentials(
-            ssid=ssid,
-            password=self.manual_password.get().strip(),
-            encryption=self.manual_encryption.get(),
-            property_type=self.manual_property.get()
-        )
-        
-        self._generate_and_preview_qr(credentials)
-        
-    def _generate_and_preview_qr(self, credentials: WiFiCredentials, show_preview: bool = True):
-        """Generar código QR y actualizar vista previa."""
-        try:
-            buffer = self.qr_manager.generate_wifi_qr(credentials)
-            
-            if credentials.property_type:
-                buffer = self.qr_manager.add_logo(buffer, credentials.property_type)
-                
-            # Agregar texto de SSID y contraseña
-            buffer = self.qr_manager.add_text(buffer, credentials.ssid, credentials.password or "")
-            
-            # Guardar QR
-            self.last_qr_path = self.qr_manager.save_qr(buffer, f"qr_{credentials.ssid}")
-            
-            # Actualizar vista previa si es necesario
-            if show_preview:
-                self._update_preview(buffer)
-                # Actualizar etiqueta de configuración
-                config_text = f"SSID: {credentials.ssid}\n"
-                if credentials.password:
-                    config_text += f"Contraseña: {credentials.password}\n"
-                config_text += f"Seguridad: {credentials.encryption}\n"
-                if credentials.property_type:
-                    config_text += f"Propiedad: {credentials.property_type}"
-                self.config_label.configure(text=config_text)
-                
-        except Exception as e:
-            logger.error(f"Error generando QR: {str(e)}")
-            messagebox.showerror("Error", str(e))
-            
-    def _update_preview(self, buffer):
-        """Actualizar vista previa de QR en la UI."""
-        try:
-            image = Image.open(buffer)
-            image.thumbnail((300, 300))
-            photo = ImageTk.PhotoImage(image)
-            
-            # Actualizar vista previa en la pestaña actual
-            self.preview_label.configure(image=photo)
-            self.preview_label.image = photo
-                    
-        except Exception as e:
-            logger.error(f"Error actualizando vista previa: {str(e)}")
-            
-    def _open_codes_folder(self):
-        """Abrir la carpeta de códigos en el explorador de archivos del sistema."""
-        try:
-            os.startfile(self.qr_manager.output_dir)
-        except Exception as e:
-            logger.error(f"Error abriendo carpeta de códigos: {str(e)}")
-            messagebox.showerror("Error", f"No se pudo abrir la carpeta de códigos: {str(e)}")
-            
-    def _open_last_qr(self):
-        """Abrir el último código QR generado."""
-        if hasattr(self, 'last_qr_path') and os.path.exists(self.last_qr_path):
-            try:
-                os.startfile(self.last_qr_path)
-            except Exception as e:
-                logger.error(f"Error abriendo último QR: {str(e)}")
-                messagebox.showerror("Error", f"No se pudo abrir el QR: {str(e)}")
-        else:
-            messagebox.showinfo("Info", "No se ha generado ningún código QR aún")
-            
-    def _update_security_switch_state(self):
-        """Actualizar el estado de la etiqueta del switch de seguridad."""
-        if self.use_excel_security.get():
-            self.security_switch_label.config(
-                text="ON - Si hay valores de seguridad en Excel, se usarán.",
-                foreground="green"
-            )
-            # Verificar si hay columna de encriptación configurada
-            if self.excel_manager and self.excel_manager.columns:
-                if self.excel_manager.columns.encryption is None:
-                    # Si la columna de seguridad no está configurada, pero el toggle está ON
-                    # Mostrar mensaje informativo para configurar columnas
-                    self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
-        else:
-            self.security_switch_label.config(
-                text="OFF - Se usará el valor de seguridad seleccionado",
-                foreground="red"
-            )
-            
-            # Verificar si podemos ocultar el mensaje de configuración
-            if not self.use_excel_property.get():
-                self.manual_config_label.pack_forget()
-
-    def _update_property_switch_state(self):
-        """Actualizar el estado de la etiqueta del switch de propiedad."""
-        if self.use_excel_property.get():
-            self.property_switch_label.config(
-                text="ON - Si hay valores de la propiedad en Excel, se usarán.",
-                foreground="green"
-            )
-            # Verificar si hay columna de propiedad configurada
-            if self.excel_manager and self.excel_manager.columns:
-                if self.excel_manager.columns.property_type is None:
-                    # Si la columna de propiedad no está configurada, pero el toggle está ON
-                    # Mostrar mensaje informativo para configurar columnas
-                    self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
-        else:
-            self.property_switch_label.config(
-                text="OFF - Se usará el valor de propiedad seleccionado",
-                foreground="red"
-            )
-            
-            # Verificar si podemos ocultar el mensaje de configuración
-            if not self.use_excel_security.get():
-                self.manual_config_label.pack_forget()
-                
     def run(self):
-        """Iniciar el bucle principal de la aplicación."""
+        """Iniciar la aplicación."""
         self.root.mainloop()

@@ -26,16 +26,23 @@ def main():
     args = parse_args()
     
     # Inicializar registro
-    LogManager(debug=args.debug)
+    logger = LogManager(debug=args.debug).get_logger()
     
     try:
+        logger.info("Iniciando aplicación VG QR Generator")
         # Iniciar GUI
         app = MainWindow()
         app.run()
+        logger.info("Aplicación finalizada correctamente")
         return 0
     except Exception as e:
+        logger.critical(f"Error fatal al iniciar la aplicación: {str(e)}", exc_info=True)
         print(f"Error al iniciar la aplicación: {str(e)}", file=sys.stderr)
         return 1
+    finally:
+        # Asegurar que los logs se escriban y cierren correctamente
+        LogManager.flush()
+        LogManager.close()
 
 if __name__ == "__main__":
     sys.exit(main())

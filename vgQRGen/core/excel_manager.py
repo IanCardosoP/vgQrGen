@@ -217,25 +217,39 @@ class ExcelManager:
             Optional[WiFiCredentials]: Credenciales WiFi de la habitación si se encuentra
         """
         if not self.sheet or not self.columns:
+            logger.error(f"Intento de buscar habitación '{room_number}' sin hoja activa o columnas configuradas")
             return None
             
         room_number = str(room_number).strip().upper()
+        logger.info(f"Buscando habitación: {room_number}")
         
         for row in self.sheet.iter_rows(min_row=2, values_only=True):
             if str(row[self.columns.room]).strip().upper() == room_number:
+                logger.info(f"Habitación {room_number} encontrada")
+                
                 # Si hay columna de encryption y tiene valor, usarlo; si no, devolver None
                 encryption = None
                 if self.columns.encryption is not None and row[self.columns.encryption]:
                     encryption = str(row[self.columns.encryption]).strip()
+                    logger.debug(f"Encriptación encontrada: {encryption}")
+                else:
+                    logger.debug("No se encontró valor de encriptación en la fila")
                     
+                # Preparar valores de credenciales
+                ssid = str(row[self.columns.ssid]).strip()
+                password = str(row[self.columns.password]).strip() if self.columns.password is not None and row[self.columns.password] else None
+                property_type = str(row[self.columns.property_type]).strip() if self.columns.property_type is not None and row[self.columns.property_type] else None
+                
+                logger.info(f"Credenciales para habitación {room_number} - SSID: {ssid}, Encriptación: {encryption}, Propiedad: {property_type}")
+                
                 return WiFiCredentials(
-                    ssid=str(row[self.columns.ssid]).strip(),
-                    password=str(row[self.columns.password]).strip() if self.columns.password is not None and row[self.columns.password] else None,
+                    ssid=ssid,
+                    password=password,
                     encryption=encryption,  # Puede ser None
-                    property_type=str(row[self.columns.property_type]).strip() if self.columns.property_type is not None and row[self.columns.property_type] else None
+                    property_type=property_type
                 )
         
-        logger.warning(f"Habitación {room_number} no encontrada")
+        logger.warning(f"Habitación {room_number} no encontrada en la hoja activa")
         return None
         
     def get_all_rooms(self) -> List[WiFiCredentials]:
@@ -246,27 +260,41 @@ class ExcelManager:
             List[WiFiCredentials]: Lista de todas las credenciales de habitaciones
         """
         if not self.sheet or not self.columns:
+            logger.error("Intento de obtener todas las habitaciones sin hoja activa o columnas configuradas")
             return []
             
+        logger.info("Iniciando extracción de todas las habitaciones en la hoja")
         credentials = []
+        row_count = 0
         
         for row in self.sheet.iter_rows(min_row=2, values_only=True):
+            row_count += 1
             if not row[self.columns.room] or not row[self.columns.ssid]:
+                logger.debug(f"Ignorando fila {row_count+1} por valores de habitación o SSID vacíos")
                 continue
                 
+            room = str(row[self.columns.room]).strip()
+            ssid = str(row[self.columns.ssid]).strip()
+            
             # Si hay columna de encryption y tiene valor, usarlo; si no, devolver None
             encryption = None
             if self.columns.encryption is not None and row[self.columns.encryption]:
                 encryption = str(row[self.columns.encryption]).strip()
                 
+            password = str(row[self.columns.password]).strip() if self.columns.password is not None and row[self.columns.password] else None
+            property_type = str(row[self.columns.property_type]).strip() if self.columns.property_type is not None and row[self.columns.property_type] else None
+            
+            logger.debug(f"Encontrada habitación {room} - SSID: {ssid}, Encriptación: {encryption}, Propiedad: {property_type}")
+                
             cred = WiFiCredentials(
-                ssid=str(row[self.columns.ssid]).strip(),
-                password=str(row[self.columns.password]).strip() if self.columns.password is not None and row[self.columns.password] else None,
+                ssid=ssid,
+                password=password,
                 encryption=encryption,  # Puede ser None
-                property_type=str(row[self.columns.property_type]).strip() if self.columns.property_type is not None and row[self.columns.property_type] else None
+                property_type=property_type
             )
             credentials.append(cred)
             
+        logger.info(f"Total de habitaciones encontradas: {len(credentials)}")
         return credentials
         
     def set_columns_manually(self, column_indices: Dict[str, int]) -> bool:

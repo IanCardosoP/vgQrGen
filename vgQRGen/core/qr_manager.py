@@ -27,7 +27,6 @@ class WiFiCredentials:
 class QRManager:
     """Gestiona la generación y manipulación de códigos QR."""
     
-    SUPPORTED_PROPERTIES = {"VLEV", "VLE", "VDPF", "VG", "VDP"}
     LOGO_PATHS = {
         "VLEV": "logos/VLEV.png",
         "VG": "logos/VDPF.png"
@@ -54,6 +53,9 @@ class QRManager:
             BytesIO: Buffer conteniendo la imagen del código QR
         """
         try:
+            logger.info(f"Generando código QR para SSID: {credentials.ssid}")
+            logger.debug(f"Detalles - Encriptación: {credentials.encryption}, Propiedad: {credentials.property_type}")
+            
             # Generar cadena de configuración WiFi
             wifi_config = helpers.make_wifi_data(
                 ssid=credentials.ssid,
@@ -64,16 +66,18 @@ class QRManager:
             
             # Crear código QR
             qr = segno.make(wifi_config, error='H')
+            logger.debug("Código QR generado con nivel de corrección 'H'")
             
             # Guardar en buffer
             buffer = BytesIO()
             qr.save(buffer, kind='png', scale=10)
             buffer.seek(0)
             
+            logger.info("Código QR generado exitosamente")
             return buffer
             
         except Exception as e:
-            logger.error(f"Error generando código QR: {str(e)}")
+            logger.error(f"Error generando código QR: {str(e)}", exc_info=True)
             raise
             
     def add_logo(self, qr_buffer: BytesIO, property_type: str) -> BytesIO:
