@@ -179,3 +179,7 @@ cython_debug/
 # Custom project folders
 codes/
 logs/
+
+# config.json
+config.json
+.config.json
