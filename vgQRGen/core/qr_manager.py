@@ -29,7 +29,7 @@ class QRManager:
     
     LOGO_PATHS = {
         "VLEV": "logos/VLEV.png",
-        "VG": "logos/VDPF.png"
+        "VDPF": "logos/VDPF.png"
     }
     
     def __init__(self, output_dir: str = "codes"):
@@ -68,9 +68,9 @@ class QRManager:
             qr = segno.make(wifi_config, error='H')
             logger.debug("Código QR generado con nivel de corrección 'H'")
             
-            # Guardar en buffer
+            # Guardar en buffer con escala aumentada para mayor resolución
             buffer = BytesIO()
-            qr.save(buffer, kind='png', scale=10)
+            qr.save(buffer, kind='png', scale=30, border=4)
             buffer.seek(0)
             
             logger.info("Código QR generado exitosamente")
@@ -151,52 +151,44 @@ class QRManager:
             qr_img = Image.open(qr_buffer)
             width, height = qr_img.size
             
-            # Crear nueva imagen con espacio para texto
-            new_height = height + 60  # Agregar 60px para texto
-            new_img = Image.new('RGB', (width, new_height), 'white')
-            new_img.paste(qr_img, (0, 0))
+            # Ya no necesitamos agregar espacio para texto aquí, se agregará en el método save_qr
+            # en el lienzo vertical de 825x1275
             
-            # Configurar fuente
+            # Configurar fuente con un tamaño proporcional a la imagen final
+            font_size = 36  # Tamaño de fuente mayor para la imagen vertical
             try:
-                font = ImageFont.truetype("calibrib.ttf", 26)
+                font = ImageFont.truetype("calibrib.ttf", font_size)
             except:
-                font = ImageFont.load_default()
-                
-            draw = ImageDraw.Draw(new_img)
+                try:
+                    # Intentar con una fuente alternativa
+                    font = ImageFont.truetype("arial.ttf", font_size)
+                except:
+                    font = ImageFont.load_default()
             
-            # Agregar texto SSID
-            text = f"SSID: {ssid}"
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            x_pos = (width - text_width) / 2
-            draw.text((x_pos, height + 5), text, font=font, fill="black")
+            # En lugar de modificar el QR, vamos a devolver los datos que necesitamos
+            # para que el método save_qr los coloque en la posición correcta
             
-            # Agregar texto de contraseña si se proporciona
-            if password:
-                text = f"Password: {password}"
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_width = bbox[2] - bbox[0]
-                x_pos = (width - text_width) / 2
-                draw.text((x_pos, height + 30), text, font=font, fill="black")
-            
-            # Guardar resultado
+            # Guardamos la imagen del QR tal cual está
             output = BytesIO()
-            new_img.save(output, format='PNG')
+            qr_img.save(output, format='PNG')
             output.seek(0)
             
+            # El texto se agregará en save_qr
             return output
             
         except Exception as e:
-            logger.error(f"Error agregando texto al QR: {str(e)}")
+            logger.error(f"Error preparando QR para texto: {str(e)}")
             return qr_buffer
             
-    def save_qr(self, qr_buffer: BytesIO, filename: str) -> str:
+    def save_qr(self, qr_buffer: BytesIO, filename: str, ssid: str = "", password: Optional[str] = None) -> str:
         """
         Guardar el código QR en un archivo.
         
         Args:
             qr_buffer (BytesIO): Buffer conteniendo la imagen del código QR
             filename (str): Nombre para el archivo de salida
+            ssid (str): SSID de la red para añadir como texto
+            password (Optional[str]): Contraseña de la red para añadir como texto
             
         Returns:
             str: Ruta al archivo guardado
@@ -207,10 +199,74 @@ class QRManager:
                 
             output_path = os.path.join(self.output_dir, filename)
             
-            with open(output_path, 'wb') as f:
-                f.write(qr_buffer.getvalue())
+            # Abrir la imagen del buffer
+            img = Image.open(qr_buffer)
+            
+            # Crear un nuevo lienzo blanco con el tamaño estandarizado vertical (825x1275)
+            standardized_img = Image.new('RGB', (825, 1100), 'white')
+            
+            # Redimensionar proporcionalmente el QR para que quepa en el lienzo
+            # pero respetando su relación de aspecto original
+            img_width, img_height = img.size
+            
+            # Calcular dimensiones para el área principal del QR (manteniendo proporción)
+            # Usaremos aproximadamente 2/3 del alto para el QR
+            target_qr_height = 825  # Misma anchura que el lienzo
+            qr_area_height = int(1275 * 0.7)  # 70% del alto total para el área del QR
+            
+            if img_width / img_height > 825 / qr_area_height:  # Si el QR es más ancho proporcionalmente
+                new_width = 825
+                new_height = int(img_height * (new_width / img_width))
+            else:  # Si el QR es más alto proporcionalmente
+                new_height = qr_area_height
+                new_width = int(img_width * (new_height / img_height))
                 
-            logger.info(f"Código QR guardado en: {output_path}")
+            resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # Calcular posición para centrar el QR en la parte superior del lienzo
+            x_pos = (825 - new_width) // 2
+            y_pos = 50  # Margen superior de 50px
+            
+            # Pegar la imagen redimensionada en el lienzo centrado
+            standardized_img.paste(resized_img, (x_pos, y_pos))
+            
+            # Añadir texto con información WiFi en la parte inferior
+            if ssid:
+                # Configurar fuente
+                font_size = 40  # Tamaño de fuente mayor para la imagen vertical
+                try:
+                    font = ImageFont.truetype("calibrib.ttf", font_size)
+                except:
+                    try:
+                        # Intentar con una fuente alternativa
+                        font = ImageFont.truetype("arial.ttf", font_size)
+                    except:
+                        font = ImageFont.load_default()
+                
+                draw = ImageDraw.Draw(standardized_img)
+                
+                # Posición base para el texto (justo debajo del QR)
+                text_y_pos = y_pos + new_height + 10 # Modificar espaciado entre QR y texto (reduce para menos espacio)
+                
+                # Agregar texto SSID
+                text = f"SSID: {ssid}"
+                bbox = draw.textbbox((0, 0), text, font=font)
+                text_width = bbox[2] - bbox[0]
+                x_text_pos = (825 - text_width) / 2
+                draw.text((x_text_pos, text_y_pos), text, font=font, fill="black")
+                
+                # Agregar texto de contraseña si se proporciona
+                if password:
+                    text = f"Password: {password}"
+                    bbox = draw.textbbox((0, 0), text, font=font)
+                    text_width = bbox[2] - bbox[0]
+                    x_text_pos = (825 - text_width) / 2
+                    draw.text((x_text_pos, text_y_pos + font_size + 5), text, font=font, fill="black")
+            
+            # Guardar la imagen estandarizada
+            standardized_img.save(output_path, format='PNG')
+            
+            logger.info(f"Código QR guardado en: {output_path} con resolución estandarizada vertical de 825x1275")
             return output_path
             
         except Exception as e:
@@ -234,8 +290,8 @@ class QRManager:
         property_type = property_type.upper().strip()
         if property_type in ('VLEV', 'VLE'):
             return 'VLEV'
-        elif property_type in ('VDPF', 'VG', 'VDP'):
-            return 'VG'
+        elif property_type in ('VDPF', 'VG', 'VDP', 'FLAMINGOS', 'Flamingos'):
+            return 'VDPF'
         elif property_type in ('SIN LOGO', 'NONE', 'NO LOGO'):
             return None
         return None

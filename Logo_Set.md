@@ -1,5 +1,3 @@
-
-```md
 # Gestión de logotipos en QRManager
 
 En la aplicación, la clase `QRManager` en el archivo `qr_manager.py` es la que determina qué imagen se usa como logotipo para cada caso.
@@ -10,7 +8,7 @@ En la aplicación, la clase `QRManager` en el archivo `qr_manager.py` es la que 
 ```python
 LOGO_PATHS = {
     "VLEV": "logos/VLEV.png",
-    "VG": "logos/VDPF.png"
+    "Flamingos": "logos/VDPF.png"
 }
 ```
 
@@ -27,8 +25,8 @@ def _normalize_property_type(property_type: Optional[str]) -> Optional[str]:
     property_type = property_type.upper().strip()
     if property_type in ('VLEV', 'VLE'):
         return 'VLEV'
-    elif property_type in ('VDPF', 'VG', 'VDP'):
-        return 'VG'
+    elif property_type in ('VDPF', 'VG', 'VDP', 'FLAMINGOS', 'FLAMINGO'):
+        return 'VDPF'
     elif property_type in ('SIN LOGO', 'NONE', 'NO LOGO'):
         return None
     return None
@@ -52,7 +50,7 @@ def add_logo(self, qr_buffer: BytesIO, property_type: str) -> BytesIO:
 ## Flujo del proceso
 
 1. Se recibe un tipo de propiedad (ej. `"VLE"`, `"VDPF"`, etc.).
-2. Se normaliza a uno de los tipos estándar (`"VLEV"` o `"VG"`).
+2. Se normaliza a uno de los tipos estándar (`"VLEV"` o `"Flamingos"`).
 3. Se busca la ruta del archivo de imagen correspondiente en el diccionario `LOGO_PATHS`.
 4. Si se encuentra una ruta válida, se aplica ese logotipo al código QR.
 
@@ -62,4 +60,4 @@ Para añadir una nueva propiedad con su logotipo:
 
 1. **Añadir la ruta del nuevo logotipo** al diccionario `LOGO_PATHS`.
 2. **Actualizar el método** `_normalize_property_type` para reconocer el nuevo tipo de propiedad.
-```
+

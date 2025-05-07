@@ -455,13 +455,13 @@ class MainWindow:
         ttk.Label(property_radios_frame, text="Propiedad por Defecto:").pack(side=tk.LEFT, padx=5)
         
         # Variable y radio buttons para propiedad
-        self.property_var = tk.StringVar(value="VG")
+        self.property_var = tk.StringVar(value="VDPF")
         self.property_radios = []
         
         property_radio_frame = ttk.Frame(property_radios_frame)
         property_radio_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        for property_type in ["VLE", "VG", "Sin Logo"]:
+        for property_type in ["VLE", "VDPF", "Sin Logo"]:
             radio = ttk.Radiobutton(
                 property_radio_frame,
                 text=property_type,
@@ -640,11 +640,11 @@ class MainWindow:
         property_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Variable y radio buttons para propiedad
-        self.manual_property_var = tk.StringVar(value="VG")
+        self.manual_property_var = tk.StringVar(value="VDPF")
         property_radio_frame = ttk.Frame(property_frame)
         property_radio_frame.pack(fill=tk.X, expand=True, padx=5, pady=5)
         
-        for property_type in ["VLE", "VG", "Sin Logo"]:
+        for property_type in ["VLE", "VDPF", "Sin Logo"]:
             ttk.Radiobutton(
                 property_radio_frame,
                 text=property_type,
@@ -687,7 +687,7 @@ class MainWindow:
         )
         
         # Generar QR
-        self._generate_and_show_qr(credentials, "manual")
+        self._generate_and_show_qr(credentials, ssid)
         
     def _generate_and_show_qr(self, credentials: WiFiCredentials, filename_prefix: str = "qr"):
         """
@@ -695,7 +695,7 @@ class MainWindow:
         
         Args:
             credentials (WiFiCredentials): Credenciales de WiFi para el QR
-            filename_prefix (str): Prefijo para el nombre del archivo guardado
+            filename_prefix (str): Prefijo para el nombre del archivo guardado (normalmente el SSID)
         """
         try:
             # Generar QR básico
@@ -705,7 +705,7 @@ class MainWindow:
             if credentials.property_type:
                 qr_buffer = self.qr_manager.add_logo(qr_buffer, credentials.property_type)
                 
-            # Agregar texto de credenciales
+            # Preparamos el buffer para la vista previa (el texto se agregará en save_qr)
             qr_buffer = self.qr_manager.add_text(qr_buffer, credentials.ssid, credentials.password)
             
             # Abrir la imagen para mostrarla (sin modificar el buffer original)
@@ -748,9 +748,24 @@ class MainWindow:
             self.config_label.configure(text=config_text)
             
             # Guardar QR en archivo (usando el buffer original sin redimensionar)
-            sanitized_prefix = ''.join(c for c in filename_prefix if c.isalnum() or c in '_- ')
-            filename = f"qr_{sanitized_prefix}.png"
-            self.last_qr_path = self.qr_manager.save_qr(qr_buffer, filename)
+            sanitized_ssid = ''.join(c for c in credentials.ssid if c.isalnum() or c in '_- ')
+            
+            # Definir el nombre del archivo según el tipo de logo
+            if credentials.property_type == 'VLEV' or credentials.property_type == 'VLE':
+                filename = f"VLE_{sanitized_ssid}.png"
+            elif credentials.property_type == 'VDPF' or credentials.property_type == 'Flamingos':
+                filename = f"VDPF_{sanitized_ssid}.png"
+            else:
+                # Sin logo o cualquier otro caso
+                filename = f"WIFI_{sanitized_ssid}.png"
+            
+            # Pasar SSID y contraseña al método save_qr para que se agregue el texto en la imagen final
+            self.last_qr_path = self.qr_manager.save_qr(
+                qr_buffer, 
+                filename, 
+                ssid=credentials.ssid, 
+                password=credentials.password
+            )
             
             return True
             
