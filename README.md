@@ -48,6 +48,17 @@ El archivo Excel debe contener las siguientes columnas:
 
 La aplicación detecta automáticamente los nombres de columnas basándose en palabras clave comunes en español e inglés. Si la detección automática falla, se puede configurar manualmente las columnas a través de la interfaz.
 
+```python
+# Palabras clave para auto-detectar encabezados de columnas
+    COLUMN_KEYWORDS = {
+        'room': ['room', 'habitacion', 'habitación', 'number', 'número', 'hab', 'cuarto', 'villa'],
+        'ssid': ['ssid', 'network', 'red', 'wifi', 'nombre', 'name', 'net'],
+        'password': ['password', 'contraseña', 'pass', 'key', 'clave', 'pwd', 'contrasena'],
+        'encryption': ['security', 'encryption', 'seguridad', 'encriptación', 'type', 'tipo', 'encriptacion'],
+        'property': ['property', 'propiedad', 'hotel', 'region', 'zona', 'lugar', 'site']
+    }
+```
+
 ### Características de la Interfaz Gráfica
 
 #### Pestaña "Importar Excel"

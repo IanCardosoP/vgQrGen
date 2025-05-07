@@ -56,22 +56,37 @@ class ExcelManager:
         Returns:
             Tuple[bool, str]: (es_válido, mensaje_error)
         """
+        logger.debug(f"Iniciando validación del archivo: {self.file_path}")
+        
         if not self.file_path:
+            logger.error("No se proporcionó ruta de archivo para validación")
             return False, "No se proporcionó ruta de archivo"
             
         if not os.path.exists(self.file_path):
+            logger.error(f"Archivo no encontrado: {self.file_path}")
             return False, f"Archivo no encontrado: {self.file_path}"
             
         if not self.file_path.lower().endswith(('.xlsx', '.xls')):
+            logger.error(f"Extensión de archivo inválida: {self.file_path}. Debe ser .xlsx o .xls")
             return False, "El archivo debe ser un archivo Excel (.xlsx o .xls)"
+        
+        file_size = os.path.getsize(self.file_path)
+        logger.debug(f"Tamaño del archivo: {file_size} bytes")
             
         try:
             # Intentar abrir el archivo para verificar que no está corrupto
             with open(self.file_path, 'rb') as f:
                 f.read(10)  # Leer primeros bytes
+            logger.debug(f"Archivo validado exitosamente: {self.file_path}")
             return True, ""
+        except PermissionError:
+            error_msg = f"Error de permisos al acceder al archivo: {self.file_path}"
+            logger.error(error_msg)
+            return False, error_msg
         except Exception as e:
-            return False, f"El archivo no es accesible: {str(e)}"
+            error_msg = f"El archivo no es accesible: {str(e)}"
+            logger.error(f"{error_msg}. Excepción: {type(e).__name__}")
+            return False, error_msg
     
     def load_workbook(self) -> Tuple[bool, str]:
         """
@@ -85,20 +100,34 @@ class ExcelManager:
         if not is_valid:
             logger.error(f"Falló la validación del archivo: {error_msg}")
             return False, error_msg
-            
+        
+        logger.info(f"Iniciando carga del libro Excel: {self.file_path}")
         try:
+            logger.debug(f"Abriendo archivo Excel con opción data_only=True")
             self.workbook = openpyxl.load_workbook(self.file_path, data_only=True)
+            
+            # Registro de información sobre el libro
+            sheet_count = len(self.workbook.sheetnames)
+            logger.info(f"Libro Excel cargado exitosamente: {self.file_path}")
+            logger.info(f"El libro contiene {sheet_count} hoja(s): {', '.join(self.workbook.sheetnames)}")
+            
             if not self.workbook.sheetnames:
+                logger.error("El archivo Excel no contiene hojas")
                 return False, "El archivo Excel no contiene hojas"
+                
             return True, ""
             
         except InvalidFileException:
             error_msg = "Formato de archivo Excel inválido"
-            logger.error(error_msg)
+            logger.error(f"{error_msg}. El archivo {self.file_path} no es un archivo Excel válido o está dañado.")
+            return False, error_msg
+        except PermissionError:
+            error_msg = "Error de permisos al acceder al archivo"
+            logger.error(f"{error_msg}. Verifique que el archivo {self.file_path} no esté abierto en otro programa.")
             return False, error_msg
         except Exception as e:
             error_msg = f"Error al cargar el libro: {str(e)}"
-            logger.error(error_msg)
+            logger.error(f"{error_msg}. Excepción: {type(e).__name__}. Detalles: {str(e)}")
             return False, error_msg
     
     def get_sheet_names(self) -> List[str]:
@@ -123,21 +152,50 @@ class ExcelManager:
             Tuple[bool, str]: (éxito, mensaje_error)
         """
         if not self.workbook:
+            logger.error("Intento de seleccionar hoja sin libro cargado")
             return False, "No hay libro cargado"
             
+        logger.info(f"Intentando seleccionar hoja: '{sheet_name}'")
+        
         if sheet_name not in self.workbook.sheetnames:
+            logger.error(f"Hoja '{sheet_name}' no encontrada en el libro. Hojas disponibles: {', '.join(self.workbook.sheetnames)}")
             return False, f"Hoja '{sheet_name}' no encontrada"
             
+        logger.debug(f"Seleccionando hoja: '{sheet_name}'")
         self.sheet = self.workbook[sheet_name]
         
         # Verificar si la hoja está vacía
-        if self.sheet.max_row < 2:  # Necesita al menos fila de encabezado y una fila de datos
+        max_row = self.sheet.max_row
+        max_col = self.sheet.max_column
+        logger.debug(f"La hoja '{sheet_name}' tiene {max_row} filas y {max_col} columnas")
+        
+        if max_row < 2:  # Necesita al menos fila de encabezado y una fila de datos
+            logger.warning(f"La hoja '{sheet_name}' está vacía o solo contiene encabezados (filas: {max_row})")
             return False, "La hoja seleccionada parece estar vacía o solo contiene encabezados"
             
         # Intentar detectar columnas de la fila de encabezado
+        logger.info(f"Intentando detectar columnas automáticamente en la hoja '{sheet_name}'")
         self.columns = self._detect_columns()
+        
         if not self.columns:
+            logger.warning(f"No se pudieron detectar columnas requeridas en la hoja '{sheet_name}'. Se requiere configuración manual.")
             return False, "No se encuentran las columnas requeridas (habitación y SSID). Por favor, utilice la configuración manual."
+        
+        # Registrar información sobre las columnas detectadas
+        column_info = []
+        if hasattr(self.columns, 'room'):
+            column_info.append(f"room: {self.columns.room}")
+        if hasattr(self.columns, 'ssid'):
+            column_info.append(f"ssid: {self.columns.ssid}")
+        if hasattr(self.columns, 'password') and self.columns.password is not None:
+            column_info.append(f"password: {self.columns.password}")
+        if hasattr(self.columns, 'encryption') and self.columns.encryption is not None:
+            column_info.append(f"encryption: {self.columns.encryption}")
+        if hasattr(self.columns, 'property_type') and self.columns.property_type is not None:
+            column_info.append(f"property_type: {self.columns.property_type}")
+            
+        logger.info(f"Columnas detectadas en la hoja '{sheet_name}': {', '.join(column_info)}")
+        logger.info(f"Hoja '{sheet_name}' cargada exitosamente")
             
         return True, ""
             

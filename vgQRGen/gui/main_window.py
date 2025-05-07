@@ -332,8 +332,11 @@ class MainWindow:
         
         file_content_frame = ttk.Frame(file_frame)
         file_content_frame.pack(fill=tk.X, expand=True)
-        file_content_frame.grid_columnconfigure(0, weight=1)
-        file_content_frame.grid_columnconfigure(1, weight=0)
+        file_content_frame.grid_columnconfigure(1, weight=1)  # La columna del combobox se expande
+        file_content_frame.grid_columnconfigure(2, weight=0)  # La columna del botón no se expande
+        
+        # Etiqueta "Libro:" + combobox + botón "Examinar"
+        ttk.Label(file_content_frame, text="Libro:").grid(row=0, column=0, sticky="w", padx=5)
         
         self.file_path = tk.StringVar()
         self.file_combo = ttk.Combobox(
@@ -341,21 +344,17 @@ class MainWindow:
             textvariable=self.file_path, 
             state="readonly"
         )
-        self.file_combo.grid(row=0, column=0, sticky="ew", padx=5)
+        self.file_combo.grid(row=0, column=1, sticky="ew", padx=5)
         self.file_combo.bind('<<ComboboxSelected>>', self._on_file_selected)
         
         # Actualizar valores del Combobox con archivos recientes
         self._update_recent_files_list()
         
-        ttk.Button(file_content_frame, text="Examinar", command=self._browse_new_excel).grid(row=0, column=1, padx=5)
+        ttk.Button(file_content_frame, text="Examinar", command=self._browse_new_excel).grid(row=0, column=2, padx=5)
 
-        # Marco de opciones de Excel
-        self.options_frame = ttk.LabelFrame(parent, text="Opciones de Excel", padding=5)
-        self.options_frame.pack(fill=tk.X, padx=5, pady=5)
-        
         # Selección de hoja
-        sheet_frame = ttk.Frame(self.options_frame)
-        sheet_frame.pack(fill=tk.X, expand=True)
+        sheet_frame = ttk.Frame(file_frame)
+        sheet_frame.pack(fill=tk.X, expand=True, pady=5)
         sheet_frame.grid_columnconfigure(1, weight=1)
         
         ttk.Label(sheet_frame, text="Hoja:").grid(row=0, column=0, sticky="w", padx=5)
@@ -364,6 +363,10 @@ class MainWindow:
         self.sheet_combo.grid(row=0, column=1, sticky="ew", padx=5)
         self.load_sheet_btn = ttk.Button(sheet_frame, text="Cargar Hoja", command=self._load_selected_sheet, state="disabled")
         self.load_sheet_btn.grid(row=0, column=2, padx=5)
+
+        # Marco de opciones de Excel
+        self.options_frame = ttk.LabelFrame(parent, text="Opciones de Excel", padding=5)
+        self.options_frame.pack(fill=tk.X, padx=5, pady=5)
 
         # Frame para opciones de seguridad y propiedad
         options_container = ttk.Frame(self.options_frame)
