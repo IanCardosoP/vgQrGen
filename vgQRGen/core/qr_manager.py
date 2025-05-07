@@ -145,17 +145,28 @@ class QRManager:
             password (Optional[str]): Contraseña de la red
             
         Returns:
-            BytesIO: Buffer conteniendo el código QR modificado
+            BytesIO: Buffer conteniendo el código QR modificado con el texto
         """
         try:
+            # Abrir la imagen del QR
             qr_img = Image.open(qr_buffer)
-            width, height = qr_img.size
+            qr_width, qr_height = qr_img.size
             
-            # Ya no necesitamos agregar espacio para texto aquí, se agregará en el método save_qr
-            # en el lienzo vertical de 825x1275
+            # Crear un nuevo lienzo más alto para agregar el texto
+            text_height = 150  # Altura estimada para el texto
+            new_height = qr_height + text_height
+            new_img = Image.new('RGB', (qr_width, new_height), 'white')
             
-            # Configurar fuente con un tamaño proporcional a la imagen final
-            font_size = 36  # Tamaño de fuente mayor para la imagen vertical
+            # Pegar el QR original en la parte superior
+            new_img.paste(qr_img, (0, 0))
+            
+            # Configurar fuente
+            font_size = max(26, qr_width // 23)  # Tamaño proporcional al ancho del QR
+            """
+            Texto más grande:
+            Aumentar el valor mínimo (26)
+            Disminuir el divisor (23)
+            """
             try:
                 font = ImageFont.truetype("calibrib.ttf", font_size)
             except:
@@ -165,19 +176,41 @@ class QRManager:
                 except:
                     font = ImageFont.load_default()
             
-            # En lugar de modificar el QR, vamos a devolver los datos que necesitamos
-            # para que el método save_qr los coloque en la posición correcta
+            # Dibujando el texto
+            draw = ImageDraw.Draw(new_img)
             
-            # Guardamos la imagen del QR tal cual está
+            # Calcular posición para el texto SSID
+            ssid_text = f"SSID: {ssid}"
+            bbox = draw.textbbox((0, 0), ssid_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            x_pos = (qr_width - text_width) // 2
+            y_pos = qr_height + 20  # 20 píxeles debajo del QR
+            
+            # Dibujar texto SSID
+            draw.text((x_pos, y_pos), ssid_text, font=font, fill="black")
+            
+            # Agregar texto de contraseña si se proporciona
+            if password:
+                pwd_text = f"Password: {password}"
+                bbox = draw.textbbox((0, 0), pwd_text, font=font)
+                text_width = bbox[2] - bbox[0]
+                x_pos = (qr_width - text_width) // 2
+                y_pos = y_pos + font_size + 10  # 10 píxeles debajo del texto SSID
+                
+                # Dibujar texto de contraseña
+                draw.text((x_pos, y_pos), pwd_text, font=font, fill="black")
+            
+            # Guardar la imagen modificada en un nuevo buffer
             output = BytesIO()
-            qr_img.save(output, format='PNG')
+            new_img.save(output, format='PNG')
             output.seek(0)
             
-            # El texto se agregará en save_qr
             return output
             
         except Exception as e:
-            logger.error(f"Error preparando QR para texto: {str(e)}")
+            logger.error(f"Error agregando texto al QR: {str(e)}")
+            # Si hay error, devolver el buffer original sin modificar
+            qr_buffer.seek(0)
             return qr_buffer
             
     def save_qr(self, qr_buffer: BytesIO, filename: str, ssid: str = "", password: Optional[str] = None) -> str:
@@ -202,7 +235,7 @@ class QRManager:
             # Abrir la imagen del buffer
             img = Image.open(qr_buffer)
             
-            # Crear un nuevo lienzo blanco con el tamaño estandarizado vertical (825x1275)
+            # Crear un nuevo lienzo blanco con el tamaño estandarizado vertical (825x1100)
             standardized_img = Image.new('RGB', (825, 1100), 'white')
             
             # Redimensionar proporcionalmente el QR para que quepa en el lienzo
@@ -230,43 +263,14 @@ class QRManager:
             # Pegar la imagen redimensionada en el lienzo centrado
             standardized_img.paste(resized_img, (x_pos, y_pos))
             
-            # Añadir texto con información WiFi en la parte inferior
-            if ssid:
-                # Configurar fuente
-                font_size = 40  # Tamaño de fuente mayor para la imagen vertical
-                try:
-                    font = ImageFont.truetype("calibrib.ttf", font_size)
-                except:
-                    try:
-                        # Intentar con una fuente alternativa
-                        font = ImageFont.truetype("arial.ttf", font_size)
-                    except:
-                        font = ImageFont.load_default()
-                
-                draw = ImageDraw.Draw(standardized_img)
-                
-                # Posición base para el texto (justo debajo del QR)
-                text_y_pos = y_pos + new_height + 10 # Modificar espaciado entre QR y texto (reduce para menos espacio)
-                
-                # Agregar texto SSID
-                text = f"SSID: {ssid}"
-                bbox = draw.textbbox((0, 0), text, font=font)
-                text_width = bbox[2] - bbox[0]
-                x_text_pos = (825 - text_width) / 2
-                draw.text((x_text_pos, text_y_pos), text, font=font, fill="black")
-                
-                # Agregar texto de contraseña si se proporciona
-                if password:
-                    text = f"Password: {password}"
-                    bbox = draw.textbbox((0, 0), text, font=font)
-                    text_width = bbox[2] - bbox[0]
-                    x_text_pos = (825 - text_width) / 2
-                    draw.text((x_text_pos, text_y_pos + font_size + 5), text, font=font, fill="black")
+            # El texto ya fue añadido en el método add_text, 
+            # por lo que no necesitamos añadirlo nuevamente aquí.
+            # Solo aplicamos el formato estándar de tamaño.
             
             # Guardar la imagen estandarizada
             standardized_img.save(output_path, format='PNG')
             
-            logger.info(f"Código QR guardado en: {output_path} con resolución estandarizada vertical de 825x1275")
+            logger.info(f"Código QR guardado en: {output_path} con resolución estandarizada vertical de 825x1100")
             return output_path
             
         except Exception as e:

@@ -43,11 +43,12 @@ class ExcelManager:
         
         Args:
             file_path (str): Ruta al archivo Excel
-        """
+        """        
         self.file_path = file_path
         self.workbook = None
         self.sheet = None
         self.columns = None
+        self.columns_detected = False  # Indicador si las columnas fueron detectadas (automática o manualmente)
         
     def validate_file(self) -> Tuple[bool, str]:
         """
@@ -180,6 +181,8 @@ class ExcelManager:
         if not self.columns:
             logger.warning(f"No se pudieron detectar columnas requeridas en la hoja '{sheet_name}'. Se requiere configuración manual.")
             return False, "No se encuentran las columnas requeridas (habitación y SSID). Por favor, utilice la configuración manual."
+        
+        self.columns_detected = True  # Actualizar indicador de detección de columnas
         
         # Registrar información sobre las columnas detectadas
         column_info = []
@@ -373,6 +376,7 @@ class ExcelManager:
                 encryption=column_indices.get('encryption'),
                 property_type=column_indices.get('property_type')
             )
+            self.columns_detected = True  # Actualizar indicador de detección de columnas
             return True
         except Exception as e:
             logger.error(f"Error al establecer columnas manualmente: {str(e)}")

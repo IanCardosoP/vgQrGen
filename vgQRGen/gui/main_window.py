@@ -172,6 +172,70 @@ class ColumnSelectionDialog(tk.Toplevel):
     def _on_cancel(self):
         self.destroy()
 
+class PasswordDialog(tk.Toplevel):
+    """Diálogo para ingresar contraseña de administrador."""
+    
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Autenticación")
+        self.success = False
+        
+        # Centrar diálogo
+        self.geometry("300x150")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        
+        # Centrar el diálogo respecto a la ventana principal
+        self.update_idletasks()  # Actualizar para obtener dimensiones reales
+        width = self.winfo_width()
+        height = self.winfo_height()
+        parent_x = parent.winfo_rootx()
+        parent_y = parent.winfo_rooty()
+        parent_width = parent.winfo_width()
+        parent_height = parent.winfo_height()
+        x = parent_x + (parent_width - width) // 2
+        y = parent_y + (parent_height - height) // 2
+        self.geometry(f"+{x}+{y}")
+        
+        # Frame principal
+        main_frame = ttk.Frame(self, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Mensaje
+        ttk.Label(
+            main_frame, 
+            text="Ingrese la contraseña de administrador\npara modificar configuraciones avanzadas:",
+            justify=tk.CENTER
+        ).pack(pady=10)
+        
+        # Entrada de contraseña
+        self.password_var = tk.StringVar()
+        password_entry = ttk.Entry(main_frame, textvariable=self.password_var, show="*")
+        password_entry.pack(fill=tk.X, pady=5)
+        password_entry.focus_set()  # Establecer foco en la entrada
+        
+        # Botones
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(pady=10)
+        
+        ttk.Button(btn_frame, text="Aceptar", command=self._on_accept).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancelar", command=self._on_cancel).pack(side=tk.LEFT)
+        
+        # Vincular Enter para aceptar
+        self.bind("<Return>", lambda e: self._on_accept())
+        
+    def _on_accept(self):
+        if self.password_var.get() == "Sud0":
+            self.success = True
+            self.destroy()
+        else:
+            messagebox.showerror("Error", "Contraseña incorrecta")
+            self.password_var.set("")
+            
+    def _on_cancel(self):
+        self.destroy()
+
 class MainWindow:
     """Ventana principal para el generador de códigos QR."""
     
@@ -193,20 +257,32 @@ class MainWindow:
         # Crear estilo para los switches
         self._setup_styles()
         
+        # Variable para controlar si se ha desbloqueado la configuración avanzada
+        self.admin_unlocked = False
+        
         # Inicializar gestores
-        self.qr_manager = QRManager()
-        self.excel_manager = None
-        self.config_manager = ConfigManager()
+        try:
+            self.qr_manager = QRManager()
+            self.excel_manager = None
+            self.config_manager = ConfigManager()
+            self.logger.debug("Gestores inicializados correctamente")
+        except Exception as e:
+            self.logger.error(f"Error al inicializar gestores: {str(e)}")
+            messagebox.showerror("Error de inicialización", f"Error al inicializar componentes: {str(e)}")
         
         # Variables para los toggles de seguridad y propiedad
         self.use_excel_security = tk.BooleanVar(value=True)
         self.use_excel_property = tk.BooleanVar(value=True)
+        self.logger.debug(f"Variables de toggles inicializadas: security={self.use_excel_security.get()}, property={self.use_excel_property.get()}")
         
         # Configurar componentes de la UI
         self._setup_ui()
         
         # Cargar último archivo si existe
         self._load_last_file()
+        
+        # Asegurar que las opciones de Excel estén deshabilitadas por defecto
+        self._toggle_admin_controls(False)
         
         self.logger.info("Ventana principal inicializada correctamente")
         
@@ -275,6 +351,7 @@ class MainWindow:
         # Pestaña de Excel
         excel_frame = ttk.Frame(notebook)
         notebook.add(excel_frame, text="Importar Excel")
+        self.excel_frame = excel_frame  # Guardar referencia para el método _toggle_admin_controls
         self._setup_excel_tab(excel_frame)
         
         # Pestaña de entrada manual
@@ -320,9 +397,14 @@ class MainWindow:
         button_frame.pack(fill=tk.X, padx=10, pady=5, side=tk.BOTTOM)  # Cambiado a BOTTOM
         
         ttk.Button(button_frame, text="Abrir Carpeta de Códigos", 
-                  command=self._open_codes_folder).pack(side=tk.LEFT, padx=5)
+                command=self._open_codes_folder).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Abrir Último QR", 
-                  command=self._open_last_qr).pack(side=tk.LEFT)
+                command=self._open_last_qr).pack(side=tk.LEFT)
+        
+        # Botón de candado en la esquina inferior derecha
+        self.lock_button = ttk.Button(button_frame, text="🔒", width=3, 
+                            command=self._toggle_admin_mode)
+        self.lock_button.pack(side=tk.RIGHT, padx=5)
         
     def _setup_excel_tab(self, parent: ttk.Frame):
         """Configurar la pestaña de importación de Excel."""
@@ -408,6 +490,8 @@ class MainWindow:
         
         # Variable y radio buttons para método de seguridad
         self.security_var = tk.StringVar(value="WPA2")
+        # Añadir trace a la variable para guardar configuración al cambiar
+        self.security_var.trace_add("write", lambda *args: self._save_sheet_config())
         self.security_radios = []
         
         radio_frame = ttk.Frame(security_radios_frame)
@@ -459,6 +543,8 @@ class MainWindow:
         
         # Variable y radio buttons para propiedad
         self.property_var = tk.StringVar(value="VDPF")
+        # Añadir trace a la variable para guardar configuración al cambiar
+        self.property_var.trace_add("write", lambda *args: self._save_sheet_config())
         self.property_radios = []
         
         property_radio_frame = ttk.Frame(property_radios_frame)
@@ -548,13 +634,110 @@ class MainWindow:
         
         # Si llegamos aquí, la hoja se cargó correctamente y las columnas se detectaron
         # Guardar la hoja en la configuración
-        self.config_manager.add_recent_file(self.file_path.get(), sheet_name)
+        file_path = self.file_path.get()
+        self.config_manager.add_recent_file(file_path, sheet_name)
+        
+        # Cargar la configuración guardada para esta hoja si existe
+        self._load_sheet_config(file_path, sheet_name)
         
         # Habilitar la búsqueda de habitación y mostrar mensaje informativo
         self._enable_room_search()
         self.manual_config_label.pack(fill=tk.X, padx=5, pady=(5, 2))
-    
-    def _update_security_switch_state(self):
+        
+    def _save_sheet_config(self):
+        """Guardar la configuración actual de la hoja."""
+        if not self.excel_manager or not self.excel_manager.sheet:
+            self.logger.debug("No se puede guardar la configuración: No hay hoja activa")
+            return
+            
+        file_path = self.file_path.get()
+        sheet_name = self.sheet_var.get()
+        
+        if not file_path or not sheet_name:
+            self.logger.debug("No se puede guardar la configuración: No hay archivo o hoja seleccionada")
+            return
+        
+        # Verificar si ya existe configuración para esta hoja
+        existing_config = self.config_manager.get_sheet_config(file_path, sheet_name)
+        
+        # Recopilar la configuración actual
+        config_data = {
+            # Estado de los checkboxes
+            "use_excel_security": self.use_excel_security.get(),
+            "use_excel_property": self.use_excel_property.get(),
+            
+            # Valores de los radio buttons
+            "security_type": self.security_var.get(),
+            "property_type": self.property_var.get(),
+            
+            # Columnas asignadas (si existen)
+            "columns": {}
+        }
+        
+        # Guardar información de columnas si están configuradas
+        if self.excel_manager.columns:
+            columns_config = {
+                "room": self.excel_manager.columns.room,
+                "ssid": self.excel_manager.columns.ssid
+            }
+            
+            if hasattr(self.excel_manager.columns, 'password') and self.excel_manager.columns.password is not None:
+                columns_config["password"] = self.excel_manager.columns.password
+                
+            if hasattr(self.excel_manager.columns, 'encryption') and self.excel_manager.columns.encryption is not None:
+                columns_config["encryption"] = self.excel_manager.columns.encryption
+                
+            if hasattr(self.excel_manager.columns, 'property_type') and self.excel_manager.columns.property_type is not None:
+                columns_config["property_type"] = self.excel_manager.columns.property_type
+                
+            config_data["columns"] = columns_config
+            config_data["columns_detected"] = self.excel_manager.columns_detected
+        
+        # Unir con configuración existente (preservando cualquier campo que no estemos actualizando)
+        if existing_config:
+            for key, value in existing_config.items():
+                if key not in config_data:
+                    config_data[key] = value
+        
+        # Guardar configuración
+        self.config_manager.save_sheet_config(file_path, sheet_name, config_data)
+        self.logger.debug(f"Configuración guardada para hoja '{sheet_name}' en archivo '{file_path}'")
+        
+    def _load_sheet_config(self, file_path: str, sheet_name: str):
+        """Cargar la configuración guardada para una hoja específica."""
+        config_data = self.config_manager.get_sheet_config(file_path, sheet_name)
+        if not config_data:
+            self.logger.debug(f"No hay configuración guardada para hoja '{sheet_name}'")
+            return
+        
+        self.logger.info(f"Cargando configuración guardada para hoja '{sheet_name}'")
+            
+        # Aplicar configuración de checkboxes si existe
+        if "use_excel_security" in config_data:
+            self.use_excel_security.set(config_data["use_excel_security"])
+            self._update_security_switch_state(save_config=False)  # No guardar para evitar ciclo
+            
+        if "use_excel_property" in config_data:
+            self.use_excel_property.set(config_data["use_excel_property"])
+            self._update_property_switch_state(save_config=False)  # No guardar para evitar ciclo
+            
+        # Aplicar configuración de radio buttons si existe
+        if "security_type" in config_data:
+            self.security_var.set(config_data["security_type"])
+            
+        if "property_type" in config_data:
+            self.property_var.set(config_data["property_type"])
+            
+        # Aplicar configuración de columnas si existe y no se han detectado automáticamente
+        if "columns" in config_data and config_data["columns"] and not self.excel_manager.columns_detected:
+            # Verificar que la configuración tiene las columnas requeridas
+            if "room" in config_data["columns"] and "ssid" in config_data["columns"]:
+                self.excel_manager.set_columns_manually(config_data["columns"])
+                self.logger.debug("Columnas personalizadas aplicadas desde configuración guardada")
+                
+        self.logger.debug(f"Configuración cargada exitosamente para hoja '{sheet_name}'")
+        
+    def _update_security_switch_state(self, save_config=True):
         """Actualizar estado de los controles según la opción de obtener seguridad desde Excel."""
         if self.use_excel_security.get():
             # Está activado - Cambiar etiqueta a ON
@@ -574,8 +757,12 @@ class MainWindow:
             # Activar radio buttons de seguridad
             for radio in self.security_radios:
                 radio['state'] = 'normal'
+                
+        # Guardar la configuración actualizada si se solicita
+        if save_config:
+            self._save_sheet_config()
     
-    def _update_property_switch_state(self):
+    def _update_property_switch_state(self, save_config=True):
         """Actualizar estado de los controles según la opción de obtener propiedad desde Excel."""
         if self.use_excel_property.get():
             # Está activado - Cambiar etiqueta a ON
@@ -595,6 +782,10 @@ class MainWindow:
             # Activar radio buttons de propiedad
             for radio in self.property_radios:
                 radio['state'] = 'normal'
+                
+        # Guardar la configuración actualizada si se solicita
+        if save_config:
+            self._save_sheet_config()
     
     def _setup_manual_tab(self, parent: ttk.Frame):
         """Configurar la pestaña de entrada manual de credenciales WiFi."""
@@ -708,10 +899,13 @@ class MainWindow:
             if credentials.property_type:
                 qr_buffer = self.qr_manager.add_logo(qr_buffer, credentials.property_type)
                 
-            # Preparamos el buffer para la vista previa (el texto se agregará en save_qr)
+            # Agregar texto al buffer
             qr_buffer = self.qr_manager.add_text(qr_buffer, credentials.ssid, credentials.password)
             
-            # Abrir la imagen para mostrarla (sin modificar el buffer original)
+            # Asegurarse de que el buffer se resetea para leer desde el principio
+            qr_buffer.seek(0)
+            
+            # Abrir la imagen para mostrarla
             qr_img = Image.open(qr_buffer)
             
             # Obtener dimensiones del área de visualización
@@ -762,7 +956,7 @@ class MainWindow:
                 # Sin logo o cualquier otro caso
                 filename = f"WIFI_{sanitized_ssid}.png"
             
-            # Pasar SSID y contraseña al método save_qr para que se agregue el texto en la imagen final
+            # Guardar la imagen final con los mismos datos (texto ya incluido en el buffer)
             self.last_qr_path = self.qr_manager.save_qr(
                 qr_buffer, 
                 filename, 
@@ -901,11 +1095,11 @@ class MainWindow:
                 'room': self.excel_manager.columns.room,
                 'ssid': self.excel_manager.columns.ssid
             }
-            if self.excel_manager.columns.password is not None:
+            if hasattr(self.excel_manager.columns, 'password') and self.excel_manager.columns.password is not None:
                 initial_columns['password'] = self.excel_manager.columns.password
-            if self.excel_manager.columns.encryption is not None:
+            if hasattr(self.excel_manager.columns, 'encryption') and self.excel_manager.columns.encryption is not None:
                 initial_columns['encryption'] = self.excel_manager.columns.encryption
-            if self.excel_manager.columns.property_type is not None:
+            if hasattr(self.excel_manager.columns, 'property_type') and self.excel_manager.columns.property_type is not None:
                 initial_columns['property_type'] = self.excel_manager.columns.property_type
         
         # Mostrar diálogo
@@ -916,7 +1110,10 @@ class MainWindow:
         if dialog.column_indices:
             if self.excel_manager.set_columns_manually(dialog.column_indices):
                 self._enable_room_search()
+                # Guardar configuración después de asignar columnas manualmente
+                self._save_sheet_config()
                 messagebox.showinfo("Éxito", "Columnas configuradas correctamente")
+                self.logger.debug("Columnas configuradas manualmente y guardadas en configuración")
             else:
                 messagebox.showerror("Error", "No se pudieron configurar las columnas")
                 
@@ -939,7 +1136,80 @@ class MainWindow:
         self.generate_btn['state'] = 'disabled'
         self.generate_all_btn['state'] = 'disabled'
         self.manual_cols_btn['state'] = 'disabled'
+
+    def _toggle_admin_mode(self):
+        """Alternar entre modo bloqueado/desbloqueado de opciones administrativas."""
+        # Verificar si ya está desbloqueado
+        if hasattr(self, 'admin_unlocked') and self.admin_unlocked:
+            # Si ya está desbloqueado, bloquear directamente
+            self.admin_unlocked = False
+            self._toggle_admin_controls(False)
+            self.lock_button.config(text="🔒")
+            self.logger.info("Opciones de administrador deshabilitadas")
+            return
+            
+        # Mostrar diálogo de contraseña
+        dialog = PasswordDialog(self.root)
+        self.root.wait_window(dialog)
         
+        # Si la contraseña fue correcta, habilitar controles
+        if dialog.success:
+            self.admin_unlocked = True
+            self._toggle_admin_controls(True)
+            self.lock_button.config(text="🔓")
+            messagebox.showinfo("Acceso concedido", "Opciones de administrador habilitadas")
+            self.logger.info("Opciones de administrador habilitadas")
+        else:
+            self.admin_unlocked = False
+            self._toggle_admin_controls(False)
+            self.lock_button.config(text="🔒")
+            self.logger.debug("Intento fallido de acceso a opciones de administrador")
+    
+    def _toggle_admin_controls(self, enabled: bool):
+        """Habilitar o deshabilitar controles de administrador."""
+        
+        if hasattr(self, 'options_frame'):
+            if enabled:
+                # Si está habilitado, mostrar el frame de opciones y ocultar el frame de autenticación
+                if hasattr(self, 'auth_required_frame'):
+                    self.auth_required_frame.pack_forget()
+                self.options_frame.pack(fill=tk.X, padx=5, pady=5)
+                self.logger.debug("Panel de opciones de Excel visible")
+            else:
+                # Si está deshabilitado, ocultar el frame de opciones y mostrar un mensaje
+                self.options_frame.pack_forget()
+                
+                # Crear frame de aviso de autenticación requerida si no existe
+                if not hasattr(self, 'auth_required_frame'):
+                    self.auth_required_frame = ttk.LabelFrame(self.excel_frame, text="Opciones de Excel", padding=5)
+                    
+                    message_frame = ttk.Frame(self.auth_required_frame)
+                    message_frame.pack(fill=tk.X, expand=True, pady=10)
+                    
+                    # Icono de candado
+                    lock_label = ttk.Label(message_frame, text="🔒", font=("", 20))
+                    lock_label.pack(pady=(5, 10))
+                    
+                    # Mensaje informativo
+                    message_label = ttk.Label(
+                        message_frame,
+                        text="Configuración protegida",
+                        font=("", 11, "bold")
+                    )
+                    message_label.pack(pady=(0, 5))
+                    
+                    # Mensaje de instrucción
+                    instruction_label = ttk.Label(
+                        message_frame,
+                        text="Haga clic en el botón de candado en la parte inferior\npara desbloquear las opciones avanzadas.",
+                        justify=tk.CENTER
+                    )
+                    instruction_label.pack(pady=(0, 10))
+                
+                # Mostrar el frame de autenticación
+                self.auth_required_frame.pack(fill=tk.X, padx=5, pady=5)
+                self.logger.debug("Panel de opciones de Excel oculto")
+                
     def run(self):
         """Iniciar la aplicación."""
         self.root.mainloop()
