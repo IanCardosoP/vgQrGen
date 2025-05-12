@@ -2,6 +2,16 @@
 
 Una aplicación Python para generar códigos QR para redes WiFi, con soporte para importación de archivos Excel y entrada manual. Esta herramienta está diseñada para facilitar la creación masiva de códigos QR para configuraciones WiFi en propiedades hoteleras.
 
+## Descargar la aplicación
+
+Puedes descargar la última versión del Generador de Códigos QR WiFi desde nuestra [página de Releases](https://github.com/TU_USUARIO/vgQrGen/releases/latest).
+
+### Instrucciones de instalación:
+1. Descarga el archivo ZIP de la versión más reciente
+2. Extrae todos los archivos manteniendo la estructura de carpetas
+3. Ejecuta vgQRGen.exe
+4. Los códigos QR generados se guardarán en la carpeta 'codes'
+
 ## Características
 
 - Genera códigos QR para redes WiFi con tipos de encriptación configurables (WPA2, WPA, WEP, sin seguridad)
@@ -15,7 +25,7 @@ Una aplicación Python para generar códigos QR para redes WiFi, con soporte par
 - Recuerda últimos archivos y hojas utilizados
 - Capacidad para generar QR individuales o por lotes
 
-## Instalación
+## Instalación desde el código fuente
 
 1. Clona este repositorio:
    ```bash
