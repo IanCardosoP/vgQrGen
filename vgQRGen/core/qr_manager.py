@@ -13,6 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 import segno
 from segno import helpers
 from ..utils.logging_utils import LogManager
+from ..utils.path_utils import resource_path
 
 logger = LogManager.get_logger(__name__)
 
@@ -28,8 +29,8 @@ class QRManager:
     """Gestiona la generación y manipulación de códigos QR."""
     
     LOGO_PATHS = {
-        "VLEV": "logos/VLEV.png",
-        "VDPF": "logos/VDPF.png"
+        "VLEV": resource_path("logos/VLEV.png"),
+        "VDPF": resource_path("logos/VDPF.png")
     }
     
     def __init__(self, output_dir: str = "codes"):
@@ -39,8 +40,8 @@ class QRManager:
         Args:
             output_dir (str): Directorio para almacenar códigos QR generados
         """
-        self.output_dir = output_dir
-        os.makedirs(output_dir, exist_ok=True)
+        self.output_dir = resource_path(output_dir)
+        os.makedirs(self.output_dir, exist_ok=True)
         
     def generate_wifi_qr(self, credentials: WiFiCredentials) -> BytesIO:
         """
@@ -196,8 +197,7 @@ class QRManager:
                 text_width = bbox[2] - bbox[0]
                 x_pos = (qr_width - text_width) // 2
                 y_pos = y_pos + font_size + 10  # 10 píxeles debajo del texto SSID
-                
-                # Dibujar texto de contraseña
+                  # Dibujar texto de contraseña
                 draw.text((x_pos, y_pos), pwd_text, font=font, fill="black")
             
             # Guardar la imagen modificada en un nuevo buffer
@@ -229,24 +229,23 @@ class QRManager:
         try:
             if not filename.endswith('.png'):
                 filename += '.png'
-                
+            
             output_path = os.path.join(self.output_dir, filename)
             
             # Abrir la imagen del buffer
-            img = Image.open(qr_buffer)
+            img = Image.open(qr_buffer).convert('RGBA')
             
-            # Crear un nuevo lienzo blanco con el tamaño estandarizado vertical (825x1100)
-            standardized_img = Image.new('RGB', (825, 1100), 'white')
+            # Crear un nuevo lienzo con el tamaño estandarizado vertical (825x1100)
+            # Usando RGBA para preservar transparencia
+            standardized_img = Image.new('RGBA', (825, 1100), (255, 255, 255, 255))
             
             # Redimensionar proporcionalmente el QR para que quepa en el lienzo
             # pero respetando su relación de aspecto original
             img_width, img_height = img.size
-            
-            # Calcular dimensiones para el área principal del QR (manteniendo proporción)
+              # Calcular dimensiones para el área principal del QR (manteniendo proporción)
             # Usaremos aproximadamente 2/3 del alto para el QR
             target_qr_height = 825  # Misma anchura que el lienzo
             qr_area_height = int(1275 * 0.7)  # 70% del alto total para el área del QR
-            
             if img_width / img_height > 825 / qr_area_height:  # Si el QR es más ancho proporcionalmente
                 new_width = 825
                 new_height = int(img_height * (new_width / img_width))
@@ -261,13 +260,12 @@ class QRManager:
             y_pos = 50  # Margen superior de 50px
             
             # Pegar la imagen redimensionada en el lienzo centrado
-            standardized_img.paste(resized_img, (x_pos, y_pos))
+            standardized_img.paste(resized_img, (x_pos, y_pos), mask=resized_img.split()[3] if 'A' in resized_img.getbands() else None)
             
-            # Convertir a PNG-8 (paleta de 256 colores) antes de guardar
-            png8_img = standardized_img.convert("P", palette=Image.ADAPTIVE)
-            png8_img.save(output_path, format='PNG', optimize=True)
+            # Guardar manteniendo transparencia (PNG-24)
+            standardized_img.save(output_path, format='PNG', optimize=True)
             
-            logger.info(f"Código QR guardado en: {output_path} como PNG-8 (paleta) con resolución estandarizada vertical de 825x1100")
+            logger.info(f"Código QR guardado en: {output_path} con transparencia preservada y resolución estandarizada vertical de 825x1100")
             return output_path
             
         except Exception as e:

@@ -18,6 +18,7 @@ from ..core.qr_manager import QRManager, WiFiCredentials
 from ..utils.logging_utils import LogManager
 from ..utils.config_manager import ConfigManager
 from ..utils.excel_utils import excel_column_to_index, index_to_excel_column
+from ..utils.path_utils import resource_path
 
 logger = LogManager.get_logger(__name__)
 

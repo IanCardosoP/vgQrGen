@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Tuple
 from dataclasses import dataclass
 from .qr_manager import WiFiCredentials
 from ..utils.logging_utils import LogManager
+from ..utils.path_utils import resource_path
 
 logger = LogManager.get_logger(__name__)
 

@@ -142,6 +142,21 @@ vgQRGen/
 - **colorama**: Formateo de salidas de texto en consola
 - **et_xmlfile**: Dependencia interna de openpyxl
 
+## Compilar la Aplicación
+
+Para generar un ejecutable Windows con PyInstaller:
+
+```bash
+pyinstaller vgQRGen.spec
+```
+
+El ejecutable se creará en la carpeta `dist/vgQRGen/`. Se incluirán automáticamente todos los archivos necesarios:
+- Archivo de configuración
+- Logotipos
+- Documentación
+
+Para distribuir la aplicación, simplemente comparte la carpeta `dist/vgQRGen` completa.
+
 ## Solución de Problemas
 
 - Para editar el tamaño o resolución de los QR, consulta [QR_tamanio_resolucion.md](QR_tamanio_resolucion.md)

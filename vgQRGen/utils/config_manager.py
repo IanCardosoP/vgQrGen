@@ -6,6 +6,7 @@ import os
 import json
 from typing import Dict, List, Optional, Any
 from .logging_utils import LogManager
+from .path_utils import resource_path
 
 logger = LogManager.get_logger(__name__)
 
@@ -26,7 +27,7 @@ class ConfigManager:
         Args:
             config_file (str): Nombre del archivo de configuración
         """
-        self.config_file = config_file
+        self.config_file = resource_path(config_file)
         
         # Verificar y asegurar que el archivo de configuración exista con la estructura adecuada
         self._ensure_config_file()

@@ -9,6 +9,7 @@ import logging
 import datetime
 import sys
 from typing import Optional
+from .path_utils import resource_path
 
 class LogManager:
     """Gestiona la configuración de registro para toda la aplicación."""
@@ -36,8 +37,8 @@ class LogManager:
         if LogManager._initialized:
             return
             
-        self.log_dir = log_dir
-        os.makedirs(log_dir, exist_ok=True)
+        self.log_dir = resource_path(log_dir)
+        os.makedirs(self.log_dir, exist_ok=True)
         
         # Crear registrador raíz
         self.logger = logging.getLogger()
@@ -56,7 +57,7 @@ class LogManager:
         
         # Manejador de archivo
         log_file = os.path.join(
-            log_dir,
+            self.log_dir,
             f"vgQrGen_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         )
         self._file_handler = logging.FileHandler(log_file, encoding='utf-8')
