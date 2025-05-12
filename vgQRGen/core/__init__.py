@@ -1,0 +1,1 @@
+"""Core functionality for QR code generation and Excel handling."""

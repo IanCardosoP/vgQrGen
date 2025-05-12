@@ -1,0 +1,25 @@
+{
+    "recent_files": [
+        {
+            "path": "C:\\Users\\cardo\\para.proyectos\\vgQrGen\\source.xlsx",
+            "last_sheet": "antenas seguridad"
+        }
+    ],
+    "max_recent_files": 5,
+    "sheet_configs": {
+        "C:\\Users\\cardo\\para.proyectos\\vgQrGen\\source.xlsx::antenas seguridad": {
+            "use_excel_security": true,
+            "use_excel_property": true,
+            "security_type": "WPA2",
+            "property_type": "VLE",
+            "columns": {
+                "room": 0,
+                "ssid": 14,
+                "password": 11,
+                "encryption": 15,
+                "property_type": 16
+            },
+            "columns_detected": true
+        }
+    }
+}

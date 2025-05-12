@@ -174,6 +174,18 @@ cython_debug/
 .ruff_cache/
 
 # PyPI configuration file
+<<<<<<< HEAD
 .pypirc.~lock.source.xlsx#
 
 codes/
+=======
+.pypirc
+
+# Custom project folders
+codes/
+logs/
+
+# config.json
+config.json
+.config.json
+>>>>>>> development

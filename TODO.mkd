@@ -1,0 +1,136 @@
+```markdown
+# Esquema Mental: Generador de QR WiFi con Logo
+
+## 📌 Módulo Principal (`wifi_qr_generator.py`)
+```python
+def generate_wifi_qr(
+    ssid: str,
+    password: str,
+    encryption: str = 'WPA',
+    output_dir: str = './qr_output',
+    logo_path: Optional[str] = None,
+    text_below: Optional[str] = None
+) -> None:
+    """
+    Función principal que orquesta la generación del QR WiFi
+    """
+```
+
+## 🔄 Flujo del Programa (Diagrama de Funciones)
+
+```mermaid
+graph TD
+    A[generate_wifi_qr] --> B[create_wifi_config]
+    A --> C[generate_qr_buffer]
+    C --> D[add_logo_to_qr]
+    A --> E[add_text_below]
+    A --> F[save_to_png]
+    D --> F
+    E --> F
+```
+
+## 🧩 Subsistemas (Responsabilidades Separadas)
+
+### 1. Configuración WiFi (`wifi_config.py`)
+```python
+def create_wifi_config(
+    ssid: str,
+    password: str,
+    encryption: str = 'WPA',
+    hidden: bool = False
+) -> Dict[str, Any]:
+    """
+    Crea objeto de configuración WiFi en formato estándar
+    Retorna: {
+        'ssid': str,
+        'password': str,
+        'encryption': str,
+        'hidden': bool,
+        'raw_string': str  # Formato: WIFI:S:<SSID>;T:<WPA/WEP/None>;P:<password>;;
+    }
+    """
+```
+
+### 2. Generación QR (`qr_generator.py`)
+```python
+def generate_qr_buffer(
+    wifi_config: Dict[str, Any],
+    size: int = 400,
+    border: int = 10,
+    error_correction: str = 'H'
+) -> BytesIO:
+    """
+    Genera QR en buffer de memoria usando qrcode library
+    Retorna objeto BytesIO con imagen QR
+    """
+```
+
+### 3. Manipulación de Imagen (`image_processor.py`)
+```python
+def add_logo_to_qr(
+    qr_buffer: BytesIO,
+    logo_path: str,
+    logo_size_ratio: float = 0.2
+) -> Image:
+    """
+    Superpone logo en centro del QR manteniendo legibilidad
+    Retorna objeto PIL.Image modificado
+    """
+```
+
+### 4. Generación de Texto (`text_utils.py`)
+```python
+def add_text_below(
+    image: Image,
+    text: str,
+    font_path: str = None,
+    font_size: int = 20,
+    padding: int = 15
+) -> Image:
+    """
+    Añade texto centrado debajo de la imagen QR
+    Retorna objeto PIL.Image extendido
+    """
+```
+
+### 5. Sistema de Archivos (`file_manager.py`)
+```python
+def save_to_png(
+    image: Image,
+    output_dir: str,
+    filename: str = None
+) -> str:
+    """
+    Guarda imagen en PNG con nombre basado en SSID y timestamp
+    Crea directorio si no existe
+    Retorna ruta completa del archivo guardado
+    """
+```
+
+## 🛠️ Dependencias Externas
+```markdown
+- `qrcode` -> Generación del código QR
+- `Pillow (PIL)` -> Manipulación de imágenes
+- `datetime` -> Timestamp para nombres de archivo
+- `os` -> Manejo de sistema de archivos
+- `typing` -> Soporte para type hints
+```
+
+## ✅ Buenas Prácticas Implementadas
+1. **Single Responsibility Principle**: Cada función hace una sola cosa
+2. **Type Hints**: Tipado estático para mejor mantenibilidad
+3. **Manejo de errores**: Validar inputs (ej: encryption ∈ ['WPA','WEP','None'])
+4. **Documentación**: Docstrings explicativos en cada función
+5. **Flexibilidad**: Parámetros opcionales con valores por defecto
+6. **Organización**: Módulos separados por responsabilidad
+```
+
+## ✨ Extras Recomendados
+```markdown
+- Añadir función `validate_wifi_params()` para verificar SSID/password válidos
+- Implementar logging para rastrear el proceso
+- Crear versión CLI usando `argparse`
+- Generar PDF con instrucciones junto al QR
+- Soporte para múltiples idiomas en el texto
+```
+
