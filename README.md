@@ -32,8 +32,6 @@ Una aplicación Python para generar códigos QR para redes WiFi, con soporte par
    - openpyxl >= 3.1.5
    - Pillow >= 11.2.1
    - segno >= 1.6.6
-   - tqdm >= 4.67.1
-   - colorama >= 0.4.6
    - et_xmlfile >= 2.0.0 (requerido por openpyxl)
 
 ## Uso
