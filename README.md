@@ -4,7 +4,7 @@ Una aplicación Python para generar códigos QR para redes WiFi, con soporte par
 
 ## Descargar la aplicación
 
-Puedes descargar la última versión del Generador de Códigos QR WiFi desde nuestra [página de Releases](https://github.com/TU_USUARIO/vgQrGen/releases/latest).
+Puedes descargar la última versión del Generador de Códigos QR WiFi desde nuestra [página de Releases](https://github.com/IanCardosoP/vgQrGen/releases).
 
 ### Instrucciones de instalación:
 1. Descarga el archivo ZIP de la versión más reciente
