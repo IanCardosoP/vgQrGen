@@ -263,14 +263,11 @@ class QRManager:
             # Pegar la imagen redimensionada en el lienzo centrado
             standardized_img.paste(resized_img, (x_pos, y_pos))
             
-            # El texto ya fue añadido en el método add_text, 
-            # por lo que no necesitamos añadirlo nuevamente aquí.
-            # Solo aplicamos el formato estándar de tamaño.
+            # Convertir a PNG-8 (paleta de 256 colores) antes de guardar
+            png8_img = standardized_img.convert("P", palette=Image.ADAPTIVE)
+            png8_img.save(output_path, format='PNG', optimize=True)
             
-            # Guardar la imagen estandarizada
-            standardized_img.save(output_path, format='PNG')
-            
-            logger.info(f"Código QR guardado en: {output_path} con resolución estandarizada vertical de 825x1100")
+            logger.info(f"Código QR guardado en: {output_path} como PNG-8 (paleta) con resolución estandarizada vertical de 825x1100")
             return output_path
             
         except Exception as e:

@@ -592,6 +592,8 @@ class MainWindow:
         self.room_number = tk.StringVar()
         self.room_entry = ttk.Entry(search_content_frame, textvariable=self.room_number, state="disabled")
         self.room_entry.grid(row=0, column=0, sticky="ew", padx=5)
+        # Vincular Enter para generar QR de la habitación
+        self.room_entry.bind('<Return>', lambda e: self._generate_room_qr())
         
         button_frame = ttk.Frame(search_content_frame)
         button_frame.grid(row=0, column=1, sticky="e")
@@ -1003,36 +1005,97 @@ class MainWindow:
         if not self.excel_manager or not self.excel_manager.sheet:
             messagebox.showerror("Error", "No hay hoja de Excel cargada")
             return
-            
+        
         all_rooms = self.excel_manager.get_all_rooms()
         if not all_rooms:
             messagebox.showerror("Error", "No se encontraron habitaciones en la hoja seleccionada")
             return
-            
-        # Pedir confirmación
-        confirm = messagebox.askyesno(
-            "Confirmar", 
-            f"Se generarán {len(all_rooms)} códigos QR. ¿Desea continuar?"
+        
+        # Diálogo de confirmación avanzada
+        confirm_dialog = tk.Toplevel(self.root)
+        confirm_dialog.title("Confirmar generación masiva")
+        confirm_dialog.grab_set()
+        confirm_dialog.resizable(False, False)
+        
+        label = ttk.Label(
+            confirm_dialog, 
+            text=f"Se generarán {len(all_rooms)} códigos QR. Este proceso no se puede cancelar. \n\nPara continuar, escriba exactamente: Generar Todo",
+            justify=tk.LEFT,
+            wraplength=350
         )
-        if not confirm:
+        label.pack(padx=20, pady=(20, 10))
+        
+        entry_var = tk.StringVar()
+        entry = ttk.Entry(confirm_dialog, textvariable=entry_var, width=25, font=("", 12))
+        entry.pack(pady=(0, 10))
+        entry.focus_set()
+        
+        button_frame = ttk.Frame(confirm_dialog)
+        button_frame.pack(pady=(0, 15))
+        
+        confirmed = {'value': False}
+        
+        def on_confirm():
+            if entry_var.get().strip() == "Generar Todo":
+                confirmed['value'] = True
+                confirm_dialog.destroy()
+            else:
+                messagebox.showerror("Confirmación requerida", "Debe escribir exactamente: Generar Todo para continuar.", parent=confirm_dialog)
+                entry.focus_set()
+        
+        def on_cancel():
+            confirm_dialog.destroy()
+        
+        confirm_btn = ttk.Button(button_frame, text="Confirmar", command=on_confirm)
+        confirm_btn.pack(side=tk.LEFT, padx=5)
+        cancel_btn = ttk.Button(button_frame, text="Cancelar", command=on_cancel)
+        cancel_btn.pack(side=tk.LEFT, padx=5)
+        
+        confirm_dialog.bind('<Return>', lambda e: on_confirm())
+        confirm_dialog.bind('<Escape>', lambda e: on_cancel())
+        
+        self.root.wait_window(confirm_dialog)
+        if not confirmed['value']:
             return
-            
+        
+        # Diálogo de progreso/cancelación
+        progress_dialog = tk.Toplevel(self.root)
+        progress_dialog.title("Generando códigos QR")
+        progress_dialog.grab_set()
+        progress_dialog.resizable(False, False)
+        ttk.Label(progress_dialog, text="Generando códigos QR, por favor espere...", font=("", 11)).pack(padx=20, pady=(20, 10))
+        progress_var = tk.StringVar(value="0 / {}".format(len(all_rooms)))
+        progress_label = ttk.Label(progress_dialog, textvariable=progress_var, font=("", 10))
+        progress_label.pack(pady=(0, 10))
+        cancel_flag = {'cancel': False}
+        def on_cancel_progress():
+            cancel_flag['cancel'] = True
+            progress_dialog.destroy()
+        cancel_btn = ttk.Button(progress_dialog, text="Cancelar", command=on_cancel_progress)
+        cancel_btn.pack(pady=(0, 15))
+        progress_dialog.protocol("WM_DELETE_WINDOW", on_cancel_progress)
+        self.root.update()  # Cambiado de update_idletasks() a update() para permitir eventos
+        
         count = 0
-        for room_data in all_rooms:
+        for idx, room_data in enumerate(all_rooms, 1):
+            if cancel_flag['cancel']:
+                break
             # Reemplazar valores según configuración
             if not self.use_excel_security.get() or not room_data.encryption:
                 room_data.encryption = self.security_var.get()
-                
             if not self.use_excel_property.get() or not room_data.property_type:
                 property_val = self.property_var.get()
                 room_data.property_type = None if property_val == "Sin Logo" else property_val
-                
             # Generar QR (usando nombre de habitación como prefijo de archivo)
             room_name = room_data.ssid.replace(" ", "_")
             if self._generate_and_show_qr(room_data, room_name):
                 count += 1
-                
-        if count > 0:
+            progress_var.set(f"{idx} / {len(all_rooms)}")
+            self.root.update()  # Cambiado de update_idletasks() a update() para permitir eventos
+        progress_dialog.destroy()
+        if cancel_flag['cancel']:
+            messagebox.showinfo("Cancelado", f"Operación cancelada. Se generaron {count} códigos QR antes de cancelar.")
+        elif count > 0:
             messagebox.showinfo("Éxito", f"Se generaron {count} códigos QR")
         else:
             messagebox.showerror("Error", "No se pudo generar ningún código QR")
