@@ -103,9 +103,8 @@ class QRManager:
             if not os.path.exists(logo_path):
                 logger.error(f"Archivo de logo no encontrado: {logo_path}")
                 return qr_buffer
-                
-            # Abrir imágenes
-            qr_img = Image.open(qr_buffer).convert('RGBA')
+                  # Abrir imágenes
+            qr_img = Image.open(qr_buffer).convert('RGB')
             logo_img = Image.open(logo_path).convert('RGBA')
             
             # Calcular tamaño del logo (25% del código QR)
@@ -114,8 +113,7 @@ class QRManager:
             # 3.5 = 28.5% del tamaño del QR (tamaño recomendado)
             # 3 = 33% del tamaño del QR (máximo recomendado)
             logo_img.thumbnail((logo_size, logo_size), Image.Resampling.LANCZOS)
-            
-            # Calcular posición para centrado
+              # Calcular posición para centrado
             x_pos = (qr_img.size[0] - logo_img.size[0]) // 2
             y_pos = (qr_img.size[1] - logo_img.size[1]) // 2
             
@@ -125,9 +123,11 @@ class QRManager:
             # Pegar logo
             qr_img.paste(logo_img, (x_pos, y_pos), mask)
             
-            # Guardar resultado
+            # Guardar resultado y convertir a PNG-8
             output = BytesIO()
-            qr_img.save(output, format='PNG')
+            # Optimizado para menor tamaño usando PNG-8
+            qr_img = qr_img.convert("P", palette=Image.ADAPTIVE)
+            qr_img.save(output, format='PNG', optimize=True)
             output.seek(0)
             
             return output
@@ -186,8 +186,7 @@ class QRManager:
             text_width = bbox[2] - bbox[0]
             x_pos = (qr_width - text_width) // 2
             y_pos = qr_height + 20  # 20 píxeles debajo del QR
-            
-            # Dibujar texto SSID
+              # Dibujar texto SSID
             draw.text((x_pos, y_pos), ssid_text, font=font, fill="black")
             
             # Agregar texto de contraseña si se proporciona
@@ -197,12 +196,15 @@ class QRManager:
                 text_width = bbox[2] - bbox[0]
                 x_pos = (qr_width - text_width) // 2
                 y_pos = y_pos + font_size + 10  # 10 píxeles debajo del texto SSID
-                  # Dibujar texto de contraseña
+                
+                # Dibujar texto de contraseña
                 draw.text((x_pos, y_pos), pwd_text, font=font, fill="black")
             
             # Guardar la imagen modificada en un nuevo buffer
             output = BytesIO()
-            new_img.save(output, format='PNG')
+            # Convertir a PNG-8 para eficiencia
+            new_img = new_img.convert("P", palette=Image.ADAPTIVE)
+            new_img.save(output, format='PNG', optimize=True)
             output.seek(0)
             
             return output
@@ -231,13 +233,12 @@ class QRManager:
                 filename += '.png'
             
             output_path = os.path.join(self.output_dir, filename)
-            
-            # Abrir la imagen del buffer
-            img = Image.open(qr_buffer).convert('RGBA')
+              # Abrir la imagen del buffer
+            img = Image.open(qr_buffer).convert('RGB')
             
             # Crear un nuevo lienzo con el tamaño estandarizado vertical (825x1100)
-            # Usando RGBA para preservar transparencia
-            standardized_img = Image.new('RGBA', (825, 1100), (255, 255, 255, 255))
+            # Usando RGB para mejor eficiencia
+            standardized_img = Image.new('RGB', (825, 1100), 'white')
             
             # Redimensionar proporcionalmente el QR para que quepa en el lienzo
             # pero respetando su relación de aspecto original
@@ -254,18 +255,18 @@ class QRManager:
                 new_width = int(img_width * (new_height / img_height))
                 
             resized_img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            
-            # Calcular posición para centrar el QR en la parte superior del lienzo
+              # Calcular posición para centrar el QR en la parte superior del lienzo
             x_pos = (825 - new_width) // 2
             y_pos = 50  # Margen superior de 50px
             
             # Pegar la imagen redimensionada en el lienzo centrado
-            standardized_img.paste(resized_img, (x_pos, y_pos), mask=resized_img.split()[3] if 'A' in resized_img.getbands() else None)
+            standardized_img.paste(resized_img, (x_pos, y_pos))
             
-            # Guardar manteniendo transparencia (PNG-24)
-            standardized_img.save(output_path, format='PNG', optimize=True)
+            # Convertir a PNG-8 para mayor eficiencia y menor tamaño
+            png8_img = standardized_img.convert("P", palette=Image.ADAPTIVE)
+            png8_img.save(output_path, format='PNG', optimize=True)
             
-            logger.info(f"Código QR guardado en: {output_path} con transparencia preservada y resolución estandarizada vertical de 825x1100")
+            logger.info(f"Código QR guardado en: {output_path} con formato PNG-8 optimizado y resolución estandarizada vertical de 825x1100")
             return output_path
             
         except Exception as e:
